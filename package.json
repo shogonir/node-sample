@@ -1,0 +1,26 @@
+{
+  "name": "node-sample",
+  "version": "1.0.0",
+  "description": "Sample node JS repository for co-development.",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/shogonir/node-sample.git"
+  },
+  "author": "shogonir",
+  "license": "MIT",
+  "bugs": {
+    "url": "https://github.com/shogonir/node-sample/issues"
+  },
+  "homepage": "https://github.com/shogonir/node-sample#readme",
+  "devDependencies": {
+    "babel-core": "^6.24.1",
+    "babel-loader": "^7.0.0",
+    "babel-preset-es2015": "^6.24.1",
+    "babel-preset-react": "^6.24.1",
+    "webpack": "^2.4.1"
+  }
+}
