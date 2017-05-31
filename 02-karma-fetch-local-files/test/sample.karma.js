@@ -6,7 +6,7 @@ describe('sample', function() {
   describe('searchText', function() {
     it('test', function(done) {
       var len = -1;
-      fetch('http://localhost:9876/base/test.txt')
+      fetch('../base/test.txt')
         .then(function(response) {
           response
             .text()
