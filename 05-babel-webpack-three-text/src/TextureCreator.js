@@ -21,7 +21,8 @@ export default class TextureCreator {
   static createTextureCanvas(message: string, fontSize: number): HTMLCanvasElement {
     let canvas: HTMLCanvasElement = document.createElement('canvas');
     let context: CanvasRenderingContext2D = canvas.getContext('2d');
-    context.font = `${fontSize.toString()}px serif`;
+    let font: string = `bold ${fontSize.toString()}px 'ＭＳ Ｐゴシック'`;
+    context.font = font;
     let metrix: TextMetrics = context.measureText(message);
     canvas.height = fontSize;
     canvas.width = metrix.width;
@@ -30,7 +31,7 @@ export default class TextureCreator {
     context.fillRect(0, 0, canvas.width, canvas.height);
 
     context.fillStyle = 'black';
-    context.font = `${fontSize.toString()}px serif`;
+    context.font = font;
     context.textAlign = 'center';
     context.textBaseline = 'middle';
     context.fillText(message, canvas.width / 2, canvas.height / 2, canvas.width);
