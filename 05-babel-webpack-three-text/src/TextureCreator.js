@@ -14,11 +14,10 @@ export default class TextureCreator {
     this.canvas.height = fontSize;
     this.canvas.width = metrix.width;
 
-    context.fillStyle = 'black';
+    context.fillStyle = 'rgba(0, 0, 0, 0)';
     context.fillRect(0, 0, this.canvas.width, this.canvas.height);
-    // context.clearRect(0, 0, this.canvas.width, this.canvas.height);
 
-    context.fillStyle = 'white';
+    context.fillStyle = 'black';
     context.font = `${fontSize.toString()}px serif`;
     context.textAlign = 'center';
     context.textBaseline = 'middle';

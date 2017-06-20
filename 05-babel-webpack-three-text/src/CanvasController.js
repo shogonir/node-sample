@@ -40,6 +40,7 @@ export default class CanvasController {
     let geometry: THREE.Geometry = new THREE.PlaneGeometry(30, 10);
     let material: THREE.Material = new THREE.MeshBasicMaterial({
       map: texture,
+      alphaTest: 0.3,      
       side: THREE.DoubleSide
     });
     let mesh: THREE.Mesh = new THREE.Mesh(geometry, material);
