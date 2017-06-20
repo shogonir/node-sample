@@ -1,32 +1,40 @@
+import * as THREE from 'three';
+
 export default class TextureCreator {
 
-  canvas: HTMLCanvasElement;
+  static createTextureMesh(message: string, fontSize: number): THREE.Mesh {
+    let canvas: HTMLCanvasElement = TextureCreator.createTextureCanvas(message, fontSize);
+    let texture: THREE.Texture = new THREE.Texture(canvas);
+    texture.needsUpdate = true;
+    texture.minFilter = THREE.LinearFilter;
 
-  constructor() {
-    this.canvas = document.createElement('canvas');
-    document.body.appendChild(this.canvas);
+    let geometry: THREE.Geometry = new THREE.PlaneGeometry(canvas.width / 20, canvas.height / 20);
+    let material: THREE.Material = new THREE.MeshBasicMaterial({
+      map: texture,
+      alphaTest: 0.2,
+      side: THREE.DoubleSide
+    });
+    let mesh: THREE.Mesh = new THREE.Mesh(geometry, material);
+    return mesh;
   }
 
-  createTexture(message: string, fontSize: number): ImageData {
-    let context: CanvasRenderingContext2D = this.canvas.getContext('2d');
+  static createTextureCanvas(message: string, fontSize: number): HTMLCanvasElement {
+    let canvas: HTMLCanvasElement = document.createElement('canvas');
+    let context: CanvasRenderingContext2D = canvas.getContext('2d');
     context.font = `${fontSize.toString()}px serif`;
     let metrix: TextMetrics = context.measureText(message);
-    this.canvas.height = fontSize;
-    this.canvas.width = metrix.width;
+    canvas.height = fontSize;
+    canvas.width = metrix.width;
 
     context.fillStyle = 'rgba(0, 0, 0, 0)';
-    context.fillRect(0, 0, this.canvas.width, this.canvas.height);
+    context.fillRect(0, 0, canvas.width, canvas.height);
 
     context.fillStyle = 'black';
     context.font = `${fontSize.toString()}px serif`;
     context.textAlign = 'center';
     context.textBaseline = 'middle';
-    context.fillText(message, this.canvas.width / 2, this.canvas.height / 2, this.canvas.width);
+    context.fillText(message, canvas.width / 2, canvas.height / 2, canvas.width);
 
-    let imageData: ImageData = context.createImageData(this.canvas.width, this.canvas.height);
-
-    context.putImageData(imageData, this.canvas.width, this.canvas.height);
-
-    return context.canvas;
+    return canvas;
   }
 }
