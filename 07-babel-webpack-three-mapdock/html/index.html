@@ -1,0 +1,32 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="UTF-8"/>
+    <title>three text</title>
+    <style type="text/css">
+    #canvas {
+      width: 800px;
+      height: 450px;
+    }
+    </style>
+  </head>
+  <body onload="onload();">
+    <canvas id="canvas"/>
+    <!--<script src="../dist/output.js"></script>-->
+    <script>
+
+function onload() {
+  let mapDock = new library.MapDock();
+  mapDock.initialize('canvas')
+    .then(() => {
+      console.log('then');
+    })
+    .catch((error) => {
+      console.log('catch');
+      console.log(error);
+    })
+}
+
+    </script>
+  </body>
+</html>

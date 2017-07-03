@@ -1,0 +1,80 @@
+import * as THREE from 'three';
+
+import Viewport from '../entity/Viewport';
+
+export default class MouseDragEventHandler {
+
+  isEnable: boolean;
+  isMouseDown: boolean;
+  previousX: number;
+  previousY: number;
+
+  onMouseDown: (event: MouseEvent) => void;
+  onMouseUp: (event: MouseEvent) => void;
+  onMouseOut: (event: MouseEvent) => void;
+  onMouseMove: (event: MouseEvent) => void;
+
+  getViewport: () => Viewport;
+
+  constructor() {
+    this.isEnable = false;
+    let self: MouseDragEventHandler = this;
+    this.onMouseDown = (event: MouseEvent) => {
+      console.log('mouse down');
+      self.isMouseDown = true;
+      self.previousX = undefined;
+      self.previousY = undefined;
+    }
+    this.onMouseUp = (event: MouseEvent) => {
+      console.log('mouse up');      
+      self.isMouseDown = false;
+      self.previousX = undefined;
+      self.previousY = undefined;
+    }
+    this.onMouseOut = (event: MouseEvent) => {
+      console.log('mouse out');      
+      self.isMouseDown = false;
+      self.previousX = undefined;
+      self.previousY = undefined;
+    }
+    this.onMouseMove = (event: MouseEvent) => {
+      console.log('mouse move');      
+      if (self.isMouseDown) {
+        let viewport: Viewport = self.getViewport();
+        let rect: ClientRect = viewport.canvas.getBoundingClientRect();        
+        let nowX: number = (event.clientX - rect.left) / rect.width;
+        let nowY: number = (event.clientY - rect.top) / rect.height;
+        if (self.previousX != null && self.previousY != null) {
+          viewport.position.add(new THREE.Vector3(nowX - self.previousX, nowY - self.previousY, 0));
+          console.log(self.getViewport());
+        }
+        self.previousX = nowX;
+        self.previousY = nowY;
+      }
+    }
+  }
+
+  enable() {
+    if (this.isEnable) {
+      return;
+    }
+    let canvas: HTMLCanvasElement = this.getViewport().canvas;
+    canvas.addEventListener('mousedown', this.onMouseDown);
+    canvas.addEventListener('mouseup', this.onMouseUp);
+    canvas.addEventListener('mouseout', this.onMouseOut);
+    canvas.addEventListener('mousemove', this.onMouseMove);
+    this.isEnable = true;
+  }
+
+  disable() {
+    if (!this.isEnable) {
+      return;
+    }
+    let canvas: HTMLCanvasElement = this.getViewport().canvas;
+    canvas.removeEventListener('mousedown', this.onMouseDown);
+    canvas.removeEventListener('mouseup', this.onMouseUp);
+    canvas.removeEventListener('mouseout', this.onMouseOut);
+    canvas.removeEventListener('mousemove', this.onMouseMove);
+    this.isEnable = false;
+  }
+}
