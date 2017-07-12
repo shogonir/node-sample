@@ -20,33 +20,29 @@ export default class MouseDragEventHandler {
     this.isEnable = false;
     let self: MouseDragEventHandler = this;
     this.onMouseDown = (event: MouseEvent) => {
-      console.log('mouse down');
       self.isMouseDown = true;
       self.previousX = undefined;
       self.previousY = undefined;
     }
     this.onMouseUp = (event: MouseEvent) => {
-      console.log('mouse up');      
       self.isMouseDown = false;
       self.previousX = undefined;
       self.previousY = undefined;
     }
     this.onMouseOut = (event: MouseEvent) => {
-      console.log('mouse out');      
       self.isMouseDown = false;
       self.previousX = undefined;
       self.previousY = undefined;
     }
     this.onMouseMove = (event: MouseEvent) => {
-      console.log('mouse move');      
       if (self.isMouseDown) {
         let viewport: Viewport = self.getViewport();
         let rect: ClientRect = viewport.canvas.getBoundingClientRect();        
         let nowX: number = (event.clientX - rect.left) / rect.width;
         let nowY: number = (event.clientY - rect.top) / rect.height;
         if (self.previousX != null && self.previousY != null) {
-          viewport.position.add(new THREE.Vector3(nowX - self.previousX, nowY - self.previousY, 0));
-          console.log(self.getViewport());
+          let diffVector: THREE.Vector3 = new THREE.Vector3(self.previousX - nowX, nowY - self.previousY, 0);
+          viewport.position.add(diffVector.multiplyScalar(10));
         }
         self.previousX = nowX;
         self.previousY = nowY;
