@@ -31,7 +31,7 @@ export default class MapDock {
       let canvas: HTMLCanvasElement = (((element): any): HTMLCanvasElement);
       self.viewport = new Viewport(canvas, new THREE.Vector3(0, 0, 10));
 
-      let canvasController: CanvasController = new CanvasController(canvas);
+      let canvasController: CanvasController = new CanvasController(canvas, self.viewport);
       let canvasManager: CanvasManager = new CanvasManager(canvasController);
 
       self.mouseDragEventHandler = new MouseDragEventHandler();
