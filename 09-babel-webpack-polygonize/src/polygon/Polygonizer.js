@@ -13,10 +13,51 @@ export default class Polygonizer {
         return;
       }
       let pointList: Array<point.Point> = point.PointUtils.fromNumberArrayPoints(points);
+      let numInitialPoints: number = pointList.length;
       let normPoints: Array<point.Point> = self.normalizePointList(pointList);
       self.normalizedPointsToCanvas(normPoints);
-      self.checkLineIntersection(normPoints);
+      let initialLines: Array<Array<number>> = self.checkLineIntersection(normPoints);
+      let lines: Array<Array<number>> = self.drawLines(normPoints, initialLines);
+      self.draw(normPoints, numInitialPoints, initialLines, lines);
     });
+  }
+
+  draw(normPoints: Array<point.Point>, numInitialPoints: number, initialLines: Array<Array<number>>, lines: Array<Array<number>>) {
+    let mayBeCanvas: ?HTMLCanvasElement = document.createElement('canvas');
+    if (mayBeCanvas == null) {
+      return;
+    }
+    let canvas: HTMLCanvasElement = mayBeCanvas;
+    let side: number = 512;
+    canvas.width = side;
+    canvas.height = side;
+    let mayBeContext: ?CanvasRenderingContext2D = canvas.getContext('2d');
+    if (mayBeContext == null) {
+      return;
+    }
+    let context: CanvasRenderingContext2D = mayBeContext;
+    normPoints.forEach((p: point.Point, pIndex: number) => {
+      context.fillStyle = (pIndex < numInitialPoints) ? "#000000" : "#FF0000";
+      context.fillRect(p.x * side - 5, p.y * side - 5, 10, 10);
+    });
+    initialLines.forEach((lIndex: Array<number>) => {
+      context.beginPath();
+      let l: line.Line = new line.Line(normPoints[lIndex[0]], normPoints[lIndex[1]]);
+      context.moveTo(l.p1.x * side, l.p1.y * side);
+      context.lineTo(l.p2.x * side, l.p2.y * side);
+      context.stroke();
+    });
+    lines.forEach((lIndex: Array<number>) => {
+      context.beginPath();
+      let l: line.Line = new line.Line(normPoints[lIndex[0]], normPoints[lIndex[1]]);
+      context.moveTo(l.p1.x * side, l.p1.y * side);
+      context.lineTo(l.p2.x * side, l.p2.y * side);
+      context.strokeStyle = "#0000FF";
+      context.stroke();
+    });
+    if (document.body != null) {
+      document.body.appendChild(canvas);
+    }
   }
 
   removeConsecutiveSamePoints(points: Array<point.Point>): Array<point.Point> {
@@ -91,20 +132,67 @@ export default class Polygonizer {
     }
   }
 
-  checkLineIntersection(ps: Array<point.Point>) {
-    let tail: number = ps.length - 1;
+  checkLineIntersection(ps: Array<point.Point>): Array<Array<number>> {
+    let lines: Array<Array<number>> = [];
+    ps.forEach((p: point.Point, i: number) => {
+      if (i === ps.length - 1) {
+        lines.push([i, 0]);
+        return;
+      }
+      lines.push([i, i + 1]);
+    });
+
+    let intersectionFound: boolean = true;
+    while (intersectionFound) {
+      intersectionFound = false;
+      lines.forEach((l1: Array<number>, i1: number) => {
+        lines.forEach((l2: Array<number>, i2: number) => {
+          if (i1 <= i2 || intersectionFound) {
+            return;
+          }
+          let line1: line.Line = new line.Line(ps[l1[0]], ps[l1[1]]);
+          let line2: line.Line = new line.Line(ps[l2[0]], ps[l2[1]]);
+          if (line1.intersects(line2)) {
+            let intersection: point.Point = line1.intersection(line2);
+            ps.push(intersection);
+            lines.splice(i1, 1);
+            lines.push([l1[0], ps.length - 1]);
+            lines.push([ps.length - 1, l1[1]]);
+            lines.splice(i2, 1);
+            lines.push([l2[0], ps.length - 1]);
+            lines.push([ps.length - 1, l2[1]]);
+            intersectionFound = true;
+            // 線分の端点が他方の線分に含まれる場合の考慮
+          }
+        });
+      });
+    }
+    return lines;
+  }
+
+  drawLines(ps: Array<point.Point>, initialLines: Array<Array<number>>): Array<Array<number>> {
+    let lines: Array<Array<number>> = [];
     ps.forEach((p1: point.Point, i1: number) => {
       ps.forEach((p2: point.Point, i2: number) => {
         if (i1 <= i2) {
           return;
         }
-        let line1: line.Line = (i1 === tail) ? new line.Line(p1, ps[0]) : new line.Line(p1, ps[i1 + 1]);
-        let line2: line.Line = (i2 === tail) ? new line.Line(p2, ps[0]) : new line.Line(p2, ps[i2 + 1]);
-        if (line1.intersects(line2)) {
-          console.log(i1, i2);
-          console.log(line1.intersection(line2));
+        let ll: line.Line = new line.Line(p1, p2);
+        for (let i = 0; i < lines.length; i++) {
+          let l: line.Line = new line.Line(ps[lines[i][0]], ps[lines[i][1]]);
+          if (ll.intersects(l, true)) {
+            return;
+          }
         }
+        for (let i = 0; i < initialLines.length; i++) {
+          let l: line.Line = new line.Line(ps[initialLines[i][0]], ps[initialLines[i][1]]);
+          if (ll.intersects(l, true)) {
+            return;
+          }
+        }
+        lines.push([i1, i2]);
       });
     });
+    return lines;
   }
 }

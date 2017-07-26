@@ -13,4 +13,8 @@ export default class Point {
   equals(another: Point): boolean {
     return this.x === another.x && this.y === another.y;
   }
+
+  sub(another: Point): Point {
+    return new Point(this.x - another.x, this.y - another.y);
+  }
 }
