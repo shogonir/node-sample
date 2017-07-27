@@ -18,11 +18,62 @@ export default class Polygonizer {
       self.normalizedPointsToCanvas(normPoints);
       let initialLines: Array<Array<number>> = self.checkLineIntersection(normPoints);
       let lines: Array<Array<number>> = self.drawLines(normPoints, initialLines);
-      self.draw(normPoints, numInitialPoints, initialLines, lines);
+      let triangles: Array<Array<number>> = self.listUpTriangles(normPoints, initialLines, lines);
+      self.draw(normPoints, numInitialPoints, initialLines, lines, triangles);
     });
   }
 
-  draw(normPoints: Array<point.Point>, numInitialPoints: number, initialLines: Array<Array<number>>, lines: Array<Array<number>>) {
+  listUpTriangles(normPoints: Array<point.Point>, initialLines: Array<Array<number>>, lines: Array<Array<number>>): Array<Array<number>> {
+    let triangles: Array<Array<number>> = [];
+    let ls: Array<Array<number>> = initialLines.concat(lines);
+    ls.forEach((l1: Array<number>, i1: number) => {
+      ls.forEach((l2: Array<number>, i2: number) => {
+        ls.forEach((l3: Array<number>, i3: number) => {
+          if (i1 <= i2 || i2 <= i3) {
+            return;
+          }
+          if (l1.includes(l2[0])) {
+            let edge: number = (l1.indexOf(l2[0]) === 0) ? 1 : 0;
+            if (l3.includes(l1[edge]) && l3.includes(l2[1])) {
+              triangles.push(l1.concat(l2[1]));
+            }
+          }
+          else if (l1.includes(l2[1])) {
+            let edge: number = (l1.indexOf(l2[1]) === 0) ? 1 : 0;
+            if (l3.includes(l1[edge]) && l3.includes(l2[0])) {
+              triangles.push(l1.concat(l2[0]));
+            }
+          }
+        });
+      });
+    });
+    return triangles;
+  }
+
+  calcSumAngle(normPoints: Array<point.Point>, initialLines: Array<Array<number>>): number {
+    let sumAngle: number = 0;
+    initialLines.forEach((lIndex: Array<number>, index: number) => {
+      if (index === 0) {
+        return;
+      }
+      let l: line.Line = new line.Line(normPoints[lIndex[0]], normPoints[lIndex[1]]);
+      let i0: number = initialLines[index - 1][0];
+      let i1: number = lIndex[0];
+      let i2: number = lIndex[1];
+      sumAngle += this.calcAngle(normPoints[i0], normPoints[i1], normPoints[i2]);
+    });
+    return sumAngle;
+  }
+
+  calcAngle(p1: point.Point, p2: point.Point, p3: point.Point): number {
+    let v1: point.Point = p2.sub(p1);
+    let v2: point.Point = p3.sub(p2);
+    let angle: number = Math.acos(v1.inner(v2) / (v1.magnitude() * v2.magnitude())) * 180 / Math.PI;
+    let coef: number = (v1.outer(v2) > 0) ? 1 : -1;
+    return coef * (180 - angle);
+  }
+
+  draw(normPoints: Array<point.Point>, numInitialPoints: number, initialLines: Array<Array<number>>, lines: Array<Array<number>>, triangles: Array<Array<number>>) {
     let mayBeCanvas: ?HTMLCanvasElement = document.createElement('canvas');
     if (mayBeCanvas == null) {
       return;
@@ -40,7 +91,7 @@ export default class Polygonizer {
       context.fillStyle = (pIndex < numInitialPoints) ? "#000000" : "#FF0000";
       context.fillRect(p.x * side - 5, p.y * side - 5, 10, 10);
     });
-    initialLines.forEach((lIndex: Array<number>) => {
+    initialLines.forEach((lIndex: Array<number>, index: number) => {
       context.beginPath();
       let l: line.Line = new line.Line(normPoints[lIndex[0]], normPoints[lIndex[1]]);
       context.moveTo(l.p1.x * side, l.p1.y * side);
@@ -54,6 +105,27 @@ export default class Polygonizer {
       context.lineTo(l.p2.x * side, l.p2.y * side);
       context.strokeStyle = "#0000FF";
       context.stroke();
+    });
+    let self: Polygonizer = this;
+    let right: boolean = this.calcSumAngle(normPoints, initialLines) < 0;
+    initialLines.forEach((l: Array<number>, lIndex: number) => {
+      triangles.forEach((t: Array<number>) => {
+        if (t.includes(l[0]) && t.includes(l[1])) {
+          let thirdIndex: number = t[3 - t.indexOf(l[0]) - t.indexOf(l[1])];
+          let isRight: boolean = self.calcAngle(normPoints[l[0]], normPoints[l[1]], normPoints[thirdIndex]) < 0;
+          if (isRight === right) {
+            context.fillStyle = "#00FF00";
+            context.beginPath();
+            context.moveTo(normPoints[t[0]].x * side, normPoints[t[0]].y * side);
+            context.lineTo(normPoints[t[1]].x * side, normPoints[t[1]].y * side);
+            context.lineTo(normPoints[t[2]].x * side, normPoints[t[2]].y * side);
+            context.fill();
+          }
+        }
+      });
+      if (l[1] >= numInitialPoints) {
+        right = !right;
+      }
     });
     if (document.body != null) {
       document.body.appendChild(canvas);
@@ -126,7 +198,7 @@ export default class Polygonizer {
     points.forEach((p: point.Point) => {
       context.lineTo(p.x * side, p.y * side);
     });
-    context.stroke();
+    context.fill();
     if (document.body != null) {
       document.body.appendChild(canvas);
     }
@@ -155,12 +227,8 @@ export default class Polygonizer {
           if (line1.intersects(line2)) {
             let intersection: point.Point = line1.intersection(line2);
             ps.push(intersection);
-            lines.splice(i1, 1);
-            lines.push([l1[0], ps.length - 1]);
-            lines.push([ps.length - 1, l1[1]]);
-            lines.splice(i2, 1);
-            lines.push([l2[0], ps.length - 1]);
-            lines.push([ps.length - 1, l2[1]]);
+            lines.splice(i1, 1, [l1[0], ps.length - 1], [ps.length - 1, l1[1]]);
+            lines.splice(i2, 1, [l2[0], ps.length - 1], [ps.length - 1, l2[1]]);
             intersectionFound = true;
             // 線分の端点が他方の線分に含まれる場合の考慮
           }
