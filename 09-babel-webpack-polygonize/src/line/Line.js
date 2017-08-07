@@ -58,7 +58,7 @@ export default class Line {
     }
     let x1: number = this.p1.x - (this.p1.y / d1);
     let x2: number = another.p1.x - (another.p1.y / d2);
-    if (Math.abs(x1 - x2) > 0.0000001) {
+    if (Math.abs(x1 - x2) > 0.00000001) {
       return false;
     }
     let xmin: number = (this.p1.x > this.p2.x) ? this.p2.x : this.p1.x;
