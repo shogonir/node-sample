@@ -20,14 +20,15 @@ export default class Polygonizer {
 
       console.log(index);
       let pointList: Array<point.Point> = point.PointUtils.fromNumberArrayPoints(points);
-      let numInitialPoints: number = pointList.length;
       let normPoints: Array<point.Point> = self.normalizePointList(pointList);
       self.normalizedPointsToCanvas(normPoints);
       let initialLines: Array<Array<number>> = self.checkLineIntersection(normPoints);
+      console.log('initialLines ' + JSON.stringify(initialLines));
       let lines: Array<Array<number>> = self.drawLines(normPoints, initialLines);
+      console.log('lines ' + JSON.stringify(lines));
       let triangles: Array<Array<number>> = self.listUpTriangles(normPoints, initialLines, lines);
-      console.log(JSON.stringify(triangles.filter((t: Array<number>) => t.includes(24))));
-      self.draw(normPoints, numInitialPoints, initialLines, lines, triangles);
+      console.log('triangles ' + JSON.stringify(triangles));
+      self.draw(normPoints, initialLines, lines, triangles);
     });
   }
 
@@ -134,7 +135,7 @@ export default class Polygonizer {
     return - coef * angle;
   }
 
-  draw(normPoints: Array<point.Point>, numInitialPoints: number, initialLines: Array<Array<number>>, lines: Array<Array<number>>, triangles: Array<Array<number>>) {
+  draw(normPoints: Array<point.Point>, initialLines: Array<Array<number>>, lines: Array<Array<number>>, triangles: Array<Array<number>>) {
     let mayBeCanvas: ?HTMLCanvasElement = document.createElement('canvas');
     if (mayBeCanvas == null) {
       return;
@@ -147,93 +148,7 @@ export default class Polygonizer {
     if (mayBeContext == null) {
       return;
     }
-    let insideTriangles: Array<Array<number>> = [];
     let context: CanvasRenderingContext2D = mayBeContext;
-    let self: Polygonizer = this;
-    let angle: number = this.calcSumAngle(normPoints, initialLines);
-    let direction: number = (angle > 0) ? -1 : (angle < 0) ? 1 : 0;
-    if ((normPoints.length - numInitialPoints) % 2 !== 0) {
-      console.log('against');
-      direction = (direction === 1) ? 1 : (direction === -1) ? 1 : 0;
-    } else {
-      if (direction === -1) {
-        direction = 1;
-      }
-    }
-    console.log(`direction=${direction}`);
-    initialLines.forEach((l: Array<number>, lIndex: number) => {
-      let remove: number = -1;
-      let inside: number = -1;
-      let previousDirection: number = direction;
-      triangles.forEach((t: Array<number>, tIndex: number) => {
-        if (t.includes(l[0]) && t.includes(l[1])) {
-          let thirdIndex: number = t[3 - t.indexOf(l[0]) - t.indexOf(l[1])];
-          let sumAngle: number = self.calcAngle(normPoints[l[0]], normPoints[l[1]], normPoints[thirdIndex]);
-          let nowDirection: number = (sumAngle > 0) ? 1 : (sumAngle < 0) ? -1 : 0;
-          if (nowDirection === 0) {
-            nowDirection = previousDirection;
-          }
-          if (direction * nowDirection !== 0 && direction === nowDirection) {
-            inside = tIndex;
-          }
-          else if (direction * nowDirection !== 0 && direction !== nowDirection) {
-            remove = tIndex;
-          }
-          if (nowDirection !== 0) {
-            previousDirection = nowDirection;
-          }
-        }
-      });
-      if (inside !== -1) {
-        insideTriangles.push(triangles.splice(inside, 1)[0]);
-      }
-      if (remove !== -1) {
-        triangles.splice((remove < inside || inside === -1) ? remove : remove - 1, 1);
-      }
-      if (l[1] >= numInitialPoints) {
-        direction = (direction === 1) ? -1 : 1;
-      }
-    });
-
-    console.log('amari ', JSON.stringify(triangles));
-    let amariInsides: Array<Array<number>> = [];
-    while (triangles.length > 0) {
-      let insides: Array<Array<number>> = [];
-      let removes: Array<Array<number>> = [];
-      triangles.forEach((t: Array<number>) => {
-        for (let index: number = 0; index < insideTriangles.length; index++) {
-          let it: Array<number> = insideTriangles[index];
-          if (self.shareLine(t, it)) {
-            insides.push(t);
-            return;
-          }
-        }
-        removes.push(t);
-      });
-      insides.forEach((t: Array<number>) => {
-        amariInsides.push(t);
-        triangles.splice(triangles.indexOf(t), 1);
-      });
-      removes.forEach((t: Array<number>) => {
-        triangles.splice(triangles.indexOf(t), 1);
-      });
-    }
-    amariInsides.forEach((t: Array<number>) => {
-      context.fillStyle = "#00FFFF";
-      context.beginPath();
-      context.moveTo(normPoints[t[0]].x * side, normPoints[t[0]].y * side);
-      context.lineTo(normPoints[t[1]].x * side, normPoints[t[1]].y * side);
-      context.lineTo(normPoints[t[2]].x * side, normPoints[t[2]].y * side);
-      context.fill();
-    });
-    insideTriangles.forEach((t: Array<number>) => {
-      context.fillStyle = "#00FF00";
-      context.beginPath();
-      context.moveTo(normPoints[t[0]].x * side, normPoints[t[0]].y * side);
-      context.lineTo(normPoints[t[1]].x * side, normPoints[t[1]].y * side);
-      context.lineTo(normPoints[t[2]].x * side, normPoints[t[2]].y * side);
-      context.fill();
-    });
     initialLines.forEach((lIndex: Array<number>, index: number) => {
       context.beginPath();
       let l: line.Line = new line.Line(normPoints[lIndex[0]], normPoints[lIndex[1]]);
@@ -250,7 +165,7 @@ export default class Polygonizer {
       context.stroke();
     });
     normPoints.forEach((p: point.Point, pIndex: number) => {
-      context.fillStyle = (pIndex < numInitialPoints) ? "#000000" : "#FF0000";
+      context.fillStyle = "#000000";
       context.fillRect(p.x * side - 2, p.y * side - 2, 4, 4);
     });
     if (document.body != null) {
@@ -412,6 +327,12 @@ export default class Polygonizer {
           return;
         }
         let ll: line.Line = new line.Line(p1, p2);
+        for (let pIndex: number = 0; pIndex < ps.length; pIndex++) {
+          let p: point.Point = ps[pIndex];
+          if (ll.overlaps(new line.Line(p, p1))) {
+            return;
+          }
+        }
         for (let i = 0; i < lines.length; i++) {
           let l: line.Line = new line.Line(ps[lines[i][0]], ps[lines[i][1]]);
           if (ll.intersects(l, true)) {

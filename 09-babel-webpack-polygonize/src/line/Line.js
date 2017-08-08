@@ -23,6 +23,9 @@ export default class Line {
   }
 
   intersects(another: Line, overlaps: boolean): boolean {
+    if (this.equals(another)) {
+      return true;
+    }
     if (overlaps && this.overlaps(another)) {
       return true;
     }
@@ -42,9 +45,6 @@ export default class Line {
   }
 
   overlaps(another: Line): boolean {
-    if (this.equals(another)) {
-      return true;
-    }
     if (this.overlapsVertical(another)) {
       return true;
     }
@@ -53,7 +53,7 @@ export default class Line {
     }
     let d1: number = (this.p2.y - this.p1.y) / (this.p2.x - this.p1.x);
     let d2: number = (another.p2.y - another.p1.y) / (another.p2.x - another.p1.x);
-    if (d1 !== d2) {
+    if (Math.abs(d1 - d2) > 0.00000001) {
       return false;
     }
     let x1: number = this.p1.x - (this.p1.y / d1);
