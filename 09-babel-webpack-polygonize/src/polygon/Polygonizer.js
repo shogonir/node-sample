@@ -3,7 +3,7 @@
 import * as point from '../point';
 import * as line from '../line';
 
-export const SIDE: number = 512;
+export const SIDE: number = 2048;
 
 export default class Polygonizer {
 
@@ -28,7 +28,9 @@ export default class Polygonizer {
       console.log('lines ' + JSON.stringify(lines));
       let triangles: Array<Array<number>> = self.listUpTriangles(normPoints, initialLines, lines);
       console.log('triangles ' + JSON.stringify(triangles));
-      self.draw(normPoints, initialLines, lines, triangles);
+      let triangleGroups: Array<Array<Array<number>>> = self.gatherTriangles(normPoints, initialLines, lines, triangles);
+      console.log(JSON.stringify(triangleGroups));
+      self.draw(normPoints, initialLines, lines, triangles, triangleGroups);
     });
   }
 
@@ -135,7 +137,48 @@ export default class Polygonizer {
     return - coef * angle;
   }
 
-  draw(normPoints: Array<point.Point>, initialLines: Array<Array<number>>, lines: Array<Array<number>>, triangles: Array<Array<number>>) {
+  gatherTriangles(normPoints: Array<point.Point>, initialLines: Array<Array<number>>, lines: Array<Array<number>>, triangles: Array<Array<number>>) {
+    let tris: Array<Array<number>> = JSON.parse(JSON.stringify(triangles));
+    let triangleGroups: Array<Array<Array<number>>> = [];
+    let self: Polygonizer = this;
+    while (tris.length > 0) {
+      let triangleGroup: Array<Array<number>> = [];
+      triangleGroup.push(tris.splice(0, 1)[0]);
+      let loopFlag: boolean = true;
+      while (loopFlag) {
+        loopFlag = false;
+        tris.forEach((t1: Array<number>, i1: number) => {
+          if (loopFlag) return;
+          triangleGroup.forEach((t2: Array<number>) => {
+            if (loopFlag) return;
+            if (JSON.stringify(t1) === JSON.stringify(t2)) return;
+            if (self.shareLine(t1, t2)) {
+              let shared: Array<number> = self.sharedLine(t1, t2);
+              if (self.includesLine(shared, lines)) {
+                loopFlag = true;
+                triangleGroup.push(tris.splice(i1, 1)[0]);
+              }
+            }
+          });
+        });
+      }
+      triangleGroups.push(triangleGroup);
+    }
+    return triangleGroups;
+  }
+
+  includesLine(l: Array<number>, ls: Array<Array<number>>): boolean {
+    for (let index: number = 0; index < ls.length; index++) {
+      let ll: Array<number> = ls[index];
+      if (ll.includes(l[0]) && ll.includes(l[1])) {
+        return true;
+      }
+    }
+    return false;
+  }
+
+  draw(normPoints: Array<point.Point>, initialLines: Array<Array<number>>, lines: Array<Array<number>>, triangles: Array<Array<number>>, triangleGroups: Array<Array<Array<number>>>) {
+    let self: Polygonizer = this;
     let mayBeCanvas: ?HTMLCanvasElement = document.createElement('canvas');
     if (mayBeCanvas == null) {
       return;
@@ -149,6 +192,16 @@ export default class Polygonizer {
       return;
     }
     let context: CanvasRenderingContext2D = mayBeContext;
+    triangleGroups.forEach((ts: Array<Array<number>>, index: number) => {
+      context.fillStyle = self.numberToColor(index);
+      ts.forEach((t: Array<number>) => {
+        context.beginPath();
+        context.moveTo(normPoints[t[0]].x * side, normPoints[t[0]].y * side);
+        context.lineTo(normPoints[t[1]].x * side, normPoints[t[1]].y * side);
+        context.lineTo(normPoints[t[2]].x * side, normPoints[t[2]].y * side);
+        context.fill();
+      });
+    });
     initialLines.forEach((lIndex: Array<number>, index: number) => {
       context.beginPath();
       let l: line.Line = new line.Line(normPoints[lIndex[0]], normPoints[lIndex[1]]);
@@ -179,6 +232,19 @@ export default class Polygonizer {
     if (t1.includes(t2[1])) score++;
     if (t1.includes(t2[2])) score++;
     return score === 2;
+  }
+
+  sharedLine(t1: Array<number>, t2: Array<number>): Array<number> {
+    if (t1.includes(t2[0]) && t1.includes(t2[1])) {
+      return [t2[0], t2[1]];
+    }
+    if (t1.includes(t2[1]) && t1.includes(t2[2])) {
+      return [t2[1], t2[2]];
+    }
+    if (t1.includes(t2[2]) && t1.includes(t2[0])) {
+      return [t2[2], t2[0]];
+    }
+    return [];
   }
 
   removeConsecutiveSamePoints(points: Array<point.Point>): Array<point.Point> {
@@ -329,7 +395,7 @@ export default class Polygonizer {
         let ll: line.Line = new line.Line(p1, p2);
         for (let pIndex: number = 0; pIndex < ps.length; pIndex++) {
           let p: point.Point = ps[pIndex];
-          if (ll.overlaps(new line.Line(p, p1))) {
+          if (ll.overlaps(new line.Line(p, p1)) && ll.overlaps(new line.Line(p, p2))) {
             return;
           }
         }
