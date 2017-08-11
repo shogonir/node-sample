@@ -11,24 +11,52 @@ export default class Polygonizer {
     const pointsJson = require('../../data/points.json');
     let self: Polygonizer = this;
     pointsJson.points.forEach((points: Array<Array<number>>, index: number) => {
-      if (index === 11) {
-        return;
-      }
-      let p = document.createElement('p');
-      p.innerHTML = index.toString();
-      document.body.appendChild(p);
-
-      console.log(index);
       let pointList: Array<point.Point> = point.PointUtils.fromNumberArrayPoints(points);
-      let numInitialPoints: number = pointList.length;
       let normPoints: Array<point.Point> = self.normalizePointList(pointList);
       self.normalizedPointsToCanvas(normPoints);
       let initialLines: Array<Array<number>> = self.checkLineIntersection(normPoints);
       let lines: Array<Array<number>> = self.drawLines(normPoints, initialLines);
       let triangles: Array<Array<number>> = self.listUpTriangles(normPoints, initialLines, lines);
-      console.log(JSON.stringify(triangles.filter((t: Array<number>) => t.includes(24))));
-      self.draw(normPoints, numInitialPoints, initialLines, lines, triangles);
+      let triangleGroups: Array<Array<Array<number>>> = self.gatherTriangles(normPoints, initialLines, lines, triangles);
+      let gravities: Array<point.Point> = self.calculateGravities(normPoints, triangleGroups);
+      let windingNumbers: Array<number> = self.countWindingNumbers(normPoints, initialLines, gravities);
+      self.draw(normPoints, initialLines, lines, triangles, triangleGroups, gravities, windingNumbers);
     });
+  }
+
+  countWindingNumbers(normPoints: Array<point.Point>, initialLines: Array<Array<number>>, gravities: Array<point.Point>): Array<number> {
+    let windingNumbers: Array<number> = Array(gravities.length).fill(0);
+    initialLines.forEach((l: Array<number>) => {
+      let p1: point.Point = normPoints[l[0]];
+      let p2: point.Point = normPoints[l[1]];
+      gravities.forEach((g: point.Point, gIndex: number) => {
+        if (p1.y <= g.y && p2.y > g.y) {
+          let yy: number = (g.y - p1.y) / (p2.y - p1.y);
+          if (g.x < (p1.x + (yy * (p2.x - p1.x)))) {
+            windingNumbers[gIndex]++;
+          }
+        }
+        else if (p1.y > g.y && p2.y <= g.y) {
+          let yy: number = (g.y - p1.y) / (p2.y - p1.y);
+          if (g.x < (p1.x + (yy * (p2.x - p1.x)))) {
+            windingNumbers[gIndex]--;
+          }
+        }
+      });
+    });
+    return windingNumbers;
+  }
+
+  calculateGravities(normPoints: Array<point.Point>, triangleGroups: Array<Array<Array<number>>>): Array<point.Point> {
+    let gravities: Array<point.Point> = [];
+    triangleGroups.forEach((ts: Array<Array<number>>) => {
+      let p1: point.Point = normPoints[ts[0][0]];
+      let p2: point.Point = normPoints[ts[0][1]];
+      let p3: point.Point = normPoints[ts[0][2]];
+      let gravity: point.Point = p1.add(p2).add(p3).scalar(1 / 3);
+      gravities.push(gravity);
+    });
+    return gravities;
   }
 
   listUpTriangles(normPoints: Array<point.Point>, initialLines: Array<Array<number>>, lines: Array<Array<number>>): Array<Array<number>> {
@@ -134,7 +162,48 @@ export default class Polygonizer {
     return - coef * angle;
   }
 
-  draw(normPoints: Array<point.Point>, numInitialPoints: number, initialLines: Array<Array<number>>, lines: Array<Array<number>>, triangles: Array<Array<number>>) {
+  gatherTriangles(normPoints: Array<point.Point>, initialLines: Array<Array<number>>, lines: Array<Array<number>>, triangles: Array<Array<number>>) {
+    let tris: Array<Array<number>> = JSON.parse(JSON.stringify(triangles));
+    let triangleGroups: Array<Array<Array<number>>> = [];
+    let self: Polygonizer = this;
+    while (tris.length > 0) {
+      let triangleGroup: Array<Array<number>> = [];
+      triangleGroup.push(tris.splice(0, 1)[0]);
+      let loopFlag: boolean = true;
+      while (loopFlag) {
+        loopFlag = false;
+        tris.forEach((t1: Array<number>, i1: number) => {
+          if (loopFlag) return;
+          triangleGroup.forEach((t2: Array<number>) => {
+            if (loopFlag) return;
+            if (JSON.stringify(t1) === JSON.stringify(t2)) return;
+            if (self.shareLine(t1, t2)) {
+              let shared: Array<number> = self.sharedLine(t1, t2);
+              if (self.includesLine(shared, lines)) {
+                loopFlag = true;
+                triangleGroup.push(tris.splice(i1, 1)[0]);
+              }
+            }
+          });
+        });
+      }
+      triangleGroups.push(triangleGroup);
+    }
+    return triangleGroups;
+  }
+
+  includesLine(l: Array<number>, ls: Array<Array<number>>): boolean {
+    for (let index: number = 0; index < ls.length; index++) {
+      let ll: Array<number> = ls[index];
+      if (ll.includes(l[0]) && ll.includes(l[1])) {
+        return true;
+      }
+    }
+    return false;
+  }
+
+  draw(normPoints: Array<point.Point>, initialLines: Array<Array<number>>, lines: Array<Array<number>>, triangles: Array<Array<number>>, triangleGroups: Array<Array<Array<number>>>, gravities: Array<point.Point>, windingNumbers: Array<number>) {
+    let self: Polygonizer = this;
     let mayBeCanvas: ?HTMLCanvasElement = document.createElement('canvas');
     if (mayBeCanvas == null) {
       return;
@@ -147,92 +216,16 @@ export default class Polygonizer {
     if (mayBeContext == null) {
       return;
     }
-    let insideTriangles: Array<Array<number>> = [];
     let context: CanvasRenderingContext2D = mayBeContext;
-    let self: Polygonizer = this;
-    let angle: number = this.calcSumAngle(normPoints, initialLines);
-    let direction: number = (angle > 0) ? -1 : (angle < 0) ? 1 : 0;
-    if ((normPoints.length - numInitialPoints) % 2 !== 0) {
-      console.log('against');
-      direction = (direction === 1) ? 1 : (direction === -1) ? 1 : 0;
-    } else {
-      if (direction === -1) {
-        direction = 1;
-      }
-    }
-    console.log(`direction=${direction}`);
-    initialLines.forEach((l: Array<number>, lIndex: number) => {
-      let remove: number = -1;
-      let inside: number = -1;
-      let previousDirection: number = direction;
-      triangles.forEach((t: Array<number>, tIndex: number) => {
-        if (t.includes(l[0]) && t.includes(l[1])) {
-          let thirdIndex: number = t[3 - t.indexOf(l[0]) - t.indexOf(l[1])];
-          let sumAngle: number = self.calcAngle(normPoints[l[0]], normPoints[l[1]], normPoints[thirdIndex]);
-          let nowDirection: number = (sumAngle > 0) ? 1 : (sumAngle < 0) ? -1 : 0;
-          if (nowDirection === 0) {
-            nowDirection = previousDirection;
-          }
-          if (direction * nowDirection !== 0 && direction === nowDirection) {
-            inside = tIndex;
-          }
-          else if (direction * nowDirection !== 0 && direction !== nowDirection) {
-            remove = tIndex;
-          }
-          if (nowDirection !== 0) {
-            previousDirection = nowDirection;
-          }
-        }
+    triangleGroups.forEach((ts: Array<Array<number>>, index: number) => {
+      context.fillStyle = (windingNumbers[index] !== 0) ? "#00FF00" : "#999999";
+      ts.forEach((t: Array<number>) => {
+        context.beginPath();
+        context.moveTo(normPoints[t[0]].x * side, normPoints[t[0]].y * side);
+        context.lineTo(normPoints[t[1]].x * side, normPoints[t[1]].y * side);
+        context.lineTo(normPoints[t[2]].x * side, normPoints[t[2]].y * side);
+        context.fill();
       });
-      if (inside !== -1) {
-        insideTriangles.push(triangles.splice(inside, 1)[0]);
-      }
-      if (remove !== -1) {
-        triangles.splice((remove < inside || inside === -1) ? remove : remove - 1, 1);
-      }
-      if (l[1] >= numInitialPoints) {
-        direction = (direction === 1) ? -1 : 1;
-      }
-    });
-
-    console.log('amari ', JSON.stringify(triangles));
-    let amariInsides: Array<Array<number>> = [];
-    while (triangles.length > 0) {
-      let insides: Array<Array<number>> = [];
-      let removes: Array<Array<number>> = [];
-      triangles.forEach((t: Array<number>) => {
-        for (let index: number = 0; index < insideTriangles.length; index++) {
-          let it: Array<number> = insideTriangles[index];
-          if (self.shareLine(t, it)) {
-            insides.push(t);
-            return;
-          }
-        }
-        removes.push(t);
-      });
-      insides.forEach((t: Array<number>) => {
-        amariInsides.push(t);
-        triangles.splice(triangles.indexOf(t), 1);
-      });
-      removes.forEach((t: Array<number>) => {
-        triangles.splice(triangles.indexOf(t), 1);
-      });
-    }
-    amariInsides.forEach((t: Array<number>) => {
-      context.fillStyle = "#00FFFF";
-      context.beginPath();
-      context.moveTo(normPoints[t[0]].x * side, normPoints[t[0]].y * side);
-      context.lineTo(normPoints[t[1]].x * side, normPoints[t[1]].y * side);
-      context.lineTo(normPoints[t[2]].x * side, normPoints[t[2]].y * side);
-      context.fill();
-    });
-    insideTriangles.forEach((t: Array<number>) => {
-      context.fillStyle = "#00FF00";
-      context.beginPath();
-      context.moveTo(normPoints[t[0]].x * side, normPoints[t[0]].y * side);
-      context.lineTo(normPoints[t[1]].x * side, normPoints[t[1]].y * side);
-      context.lineTo(normPoints[t[2]].x * side, normPoints[t[2]].y * side);
-      context.fill();
     });
     initialLines.forEach((lIndex: Array<number>, index: number) => {
       context.beginPath();
@@ -250,8 +243,12 @@ export default class Polygonizer {
       context.stroke();
     });
     normPoints.forEach((p: point.Point, pIndex: number) => {
-      context.fillStyle = (pIndex < numInitialPoints) ? "#000000" : "#FF0000";
+      context.fillStyle = "#000000";
       context.fillRect(p.x * side - 2, p.y * side - 2, 4, 4);
+    });
+    gravities.forEach((g: point.Point) => {
+      context.fillStyle = "#FFFFFF";
+      context.fillRect(g.x * side - 2, g.y * side - 2, 4, 4);
     });
     if (document.body != null) {
       document.body.appendChild(canvas);
@@ -264,6 +261,19 @@ export default class Polygonizer {
     if (t1.includes(t2[1])) score++;
     if (t1.includes(t2[2])) score++;
     return score === 2;
+  }
+
+  sharedLine(t1: Array<number>, t2: Array<number>): Array<number> {
+    if (t1.includes(t2[0]) && t1.includes(t2[1])) {
+      return [t2[0], t2[1]];
+    }
+    if (t1.includes(t2[1]) && t1.includes(t2[2])) {
+      return [t2[1], t2[2]];
+    }
+    if (t1.includes(t2[2]) && t1.includes(t2[0])) {
+      return [t2[2], t2[0]];
+    }
+    return [];
   }
 
   removeConsecutiveSamePoints(points: Array<point.Point>): Array<point.Point> {
@@ -383,6 +393,22 @@ export default class Polygonizer {
     let intersectionFound: boolean = true;
     while (intersectionFound) {
       intersectionFound = false;
+      lines.forEach((l: Array<number>, lIndex: number) => {
+        ps.forEach((p: point.Point, pIndex: number) => {
+          if (l.includes(pIndex) || intersectionFound) return;
+          let p1: point.Point = ps[l[0]];
+          let p2: point.Point = ps[l[1]];
+          let ll: line.Line = new line.Line(p1, p2);
+          if (ll.overlaps(new line.Line(p, p1)) && ll.overlaps(new line.Line(p, p2))) {
+            intersectionFound = true;
+            lines.splice(lIndex, 1, [l[0], pIndex], [pIndex, l[1]]);
+          }
+        });
+      });
+    }
+    intersectionFound = true;
+    while (intersectionFound) {
+      intersectionFound = false;
       lines.forEach((l1: Array<number>, i1: number) => {
         lines.forEach((l2: Array<number>, i2: number) => {
           if (i1 <= i2 || intersectionFound) {
@@ -412,6 +438,12 @@ export default class Polygonizer {
           return;
         }
         let ll: line.Line = new line.Line(p1, p2);
+        for (let pIndex: number = 0; pIndex < ps.length; pIndex++) {
+          let p: point.Point = ps[pIndex];
+          if (ll.overlaps(new line.Line(p, p1)) && ll.overlaps(new line.Line(p, p2))) {
+            return;
+          }
+        }
         for (let i = 0; i < lines.length; i++) {
           let l: line.Line = new line.Line(ps[lines[i][0]], ps[lines[i][1]]);
           if (ll.intersects(l, true)) {
