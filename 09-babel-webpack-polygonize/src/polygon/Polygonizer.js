@@ -3,7 +3,7 @@
 import * as point from '../point';
 import * as line from '../line';
 
-export const SIDE: number = 2048;
+export const SIDE: number = 512;
 
 export default class Polygonizer {
 
@@ -11,27 +11,52 @@ export default class Polygonizer {
     const pointsJson = require('../../data/points.json');
     let self: Polygonizer = this;
     pointsJson.points.forEach((points: Array<Array<number>>, index: number) => {
-      if (index === 11) {
-        return;
-      }
-      let p = document.createElement('p');
-      p.innerHTML = index.toString();
-      document.body.appendChild(p);
-
-      console.log(index);
       let pointList: Array<point.Point> = point.PointUtils.fromNumberArrayPoints(points);
       let normPoints: Array<point.Point> = self.normalizePointList(pointList);
       self.normalizedPointsToCanvas(normPoints);
       let initialLines: Array<Array<number>> = self.checkLineIntersection(normPoints);
-      console.log('initialLines ' + JSON.stringify(initialLines));
       let lines: Array<Array<number>> = self.drawLines(normPoints, initialLines);
-      console.log('lines ' + JSON.stringify(lines));
       let triangles: Array<Array<number>> = self.listUpTriangles(normPoints, initialLines, lines);
-      console.log('triangles ' + JSON.stringify(triangles));
       let triangleGroups: Array<Array<Array<number>>> = self.gatherTriangles(normPoints, initialLines, lines, triangles);
-      console.log(JSON.stringify(triangleGroups));
-      self.draw(normPoints, initialLines, lines, triangles, triangleGroups);
+      let gravities: Array<point.Point> = self.calculateGravities(normPoints, triangleGroups);
+      let windingNumbers: Array<number> = self.countWindingNumbers(normPoints, initialLines, gravities);
+      self.draw(normPoints, initialLines, lines, triangles, triangleGroups, gravities, windingNumbers);
     });
+  }
+
+  countWindingNumbers(normPoints: Array<point.Point>, initialLines: Array<Array<number>>, gravities: Array<point.Point>): Array<number> {
+    let windingNumbers: Array<number> = Array(gravities.length).fill(0);
+    initialLines.forEach((l: Array<number>) => {
+      let p1: point.Point = normPoints[l[0]];
+      let p2: point.Point = normPoints[l[1]];
+      gravities.forEach((g: point.Point, gIndex: number) => {
+        if (p1.y <= g.y && p2.y > g.y) {
+          let yy: number = (g.y - p1.y) / (p2.y - p1.y);
+          if (g.x < (p1.x + (yy * (p2.x - p1.x)))) {
+            windingNumbers[gIndex]++;
+          }
+        }
+        else if (p1.y > g.y && p2.y <= g.y) {
+          let yy: number = (g.y - p1.y) / (p2.y - p1.y);
+          if (g.x < (p1.x + (yy * (p2.x - p1.x)))) {
+            windingNumbers[gIndex]--;
+          }
+        }
+      });
+    });
+    return windingNumbers;
+  }
+
+  calculateGravities(normPoints: Array<point.Point>, triangleGroups: Array<Array<Array<number>>>): Array<point.Point> {
+    let gravities: Array<point.Point> = [];
+    triangleGroups.forEach((ts: Array<Array<number>>) => {
+      let p1: point.Point = normPoints[ts[0][0]];
+      let p2: point.Point = normPoints[ts[0][1]];
+      let p3: point.Point = normPoints[ts[0][2]];
+      let gravity: point.Point = p1.add(p2).add(p3).scalar(1 / 3);
+      gravities.push(gravity);
+    });
+    return gravities;
   }
 
   listUpTriangles(normPoints: Array<point.Point>, initialLines: Array<Array<number>>, lines: Array<Array<number>>): Array<Array<number>> {
@@ -177,7 +202,7 @@ export default class Polygonizer {
     return false;
   }
 
-  draw(normPoints: Array<point.Point>, initialLines: Array<Array<number>>, lines: Array<Array<number>>, triangles: Array<Array<number>>, triangleGroups: Array<Array<Array<number>>>) {
+  draw(normPoints: Array<point.Point>, initialLines: Array<Array<number>>, lines: Array<Array<number>>, triangles: Array<Array<number>>, triangleGroups: Array<Array<Array<number>>>, gravities: Array<point.Point>, windingNumbers: Array<number>) {
     let self: Polygonizer = this;
     let mayBeCanvas: ?HTMLCanvasElement = document.createElement('canvas');
     if (mayBeCanvas == null) {
@@ -193,7 +218,7 @@ export default class Polygonizer {
     }
     let context: CanvasRenderingContext2D = mayBeContext;
     triangleGroups.forEach((ts: Array<Array<number>>, index: number) => {
-      context.fillStyle = self.numberToColor(index);
+      context.fillStyle = (windingNumbers[index] !== 0) ? "#00FF00" : "#999999";
       ts.forEach((t: Array<number>) => {
         context.beginPath();
         context.moveTo(normPoints[t[0]].x * side, normPoints[t[0]].y * side);
@@ -220,6 +245,10 @@ export default class Polygonizer {
     normPoints.forEach((p: point.Point, pIndex: number) => {
       context.fillStyle = "#000000";
       context.fillRect(p.x * side - 2, p.y * side - 2, 4, 4);
+    });
+    gravities.forEach((g: point.Point) => {
+      context.fillStyle = "#FFFFFF";
+      context.fillRect(g.x * side - 2, g.y * side - 2, 4, 4);
     });
     if (document.body != null) {
       document.body.appendChild(canvas);
@@ -362,6 +391,22 @@ export default class Polygonizer {
     });
 
     let intersectionFound: boolean = true;
+    while (intersectionFound) {
+      intersectionFound = false;
+      lines.forEach((l: Array<number>, lIndex: number) => {
+        ps.forEach((p: point.Point, pIndex: number) => {
+          if (l.includes(pIndex) || intersectionFound) return;
+          let p1: point.Point = ps[l[0]];
+          let p2: point.Point = ps[l[1]];
+          let ll: line.Line = new line.Line(p1, p2);
+          if (ll.overlaps(new line.Line(p, p1)) && ll.overlaps(new line.Line(p, p2))) {
+            intersectionFound = true;
+            lines.splice(lIndex, 1, [l[0], pIndex], [pIndex, l[1]]);
+          }
+        });
+      });
+    }
+    intersectionFound = true;
     while (intersectionFound) {
       intersectionFound = false;
       lines.forEach((l1: Array<number>, i1: number) => {

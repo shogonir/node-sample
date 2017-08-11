@@ -2,6 +2,8 @@
 
 import * as point from '../point';
 
+export const EPSILON: number = 0.000000000001;
+
 export default class Line {
 
   p1: point.Point;
@@ -20,6 +22,14 @@ export default class Line {
       return true;
     }
     return false;
+  }
+
+  isHorizontal(): boolean {
+    return this.p1.y === this.p2.y;
+  }
+
+  isVertical(): boolean {
+    return this.p1.x === this.p2.x;
   }
 
   intersects(another: Line, overlaps: boolean): boolean {
@@ -51,14 +61,17 @@ export default class Line {
     if (this.overlapsHorizontal(another)) {
       return true;
     }
+    if (this.isHorizontal() || another.isHorizontal() || this.isVertical() || another.isVertical()) {
+      return false;
+    }
     let d1: number = (this.p2.y - this.p1.y) / (this.p2.x - this.p1.x);
     let d2: number = (another.p2.y - another.p1.y) / (another.p2.x - another.p1.x);
-    if (Math.abs(d1 - d2) > 0.00000001) {
+    if (Math.abs(d1 - d2) > EPSILON) {
       return false;
     }
     let x1: number = this.p1.x - (this.p1.y / d1);
     let x2: number = another.p1.x - (another.p1.y / d2);
-    if (Math.abs(x1 - x2) > 0.00000001) {
+    if (Math.abs(x1 - x2) > EPSILON) {
       return false;
     }
     let xmin: number = (this.p1.x > this.p2.x) ? this.p2.x : this.p1.x;
@@ -75,7 +88,7 @@ export default class Line {
   }
 
   overlapsVertical(another: Line): boolean {
-    if (this.p1.x !== this.p2.x || another.p1.x !== another.p2.x) {
+    if (!this.isVertical() || !another.isVertical()) {
       return false;
     }
     if (this.p1.x !== another.p1.x) {
@@ -95,7 +108,7 @@ export default class Line {
   }
 
   overlapsHorizontal(another: Line): boolean {
-    if (this.p1.y !== this.p2.y || another.p1.y !== another.p2.y) {
+    if (!this.isHorizontal() || !another.isHorizontal()) {
       return false;
     }
     if (this.p1.y !== another.p1.y) {
