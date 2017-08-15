@@ -1,1 +1,1 @@
-export { default as Polygonizer } from './polygon/Polygonizer';
+export { default as Main } from './Main';

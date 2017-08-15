@@ -2,20 +2,26 @@
 
 import * as point from '../point';
 import * as line from '../line';
+import PointIndexHash from './PointIndexHash';
 
-export const SIDE: number = 128;
+export const SIDE: number = 256;
 
 export default class Polygonizer {
 
-  constructor() {
-    const pointsJson = require('../../data/points.json');
-    let self: Polygonizer = this;
-    pointsJson.points.forEach((points: Array<Array<number>>, index: number) => {
-      if (index === 11) {
-        return;
-      }
-      let pointList: Array<point.Point> = point.PointUtils.fromNumberArrayPoints(points);
-      let normPoints: Array<point.Point> = self.normalizePointList(pointList);
+  pointList: Array<point.Point>;
+
+  lineList: Array<Array<number>>;
+  lineHash: PointIndexHash;
+  isPolygonLines: Array<boolean>;
+
+  triangleList: Array<Array<number>>;
+  triangleHash: PointIndexHash;
+  triangleGroup: Array<number>;
+
+  gravities: Array<point.Point>;
+  windingNumbers: Array<number>;
+
+  /*
       let initialLines: Array<Array<number>> = self.checkLineIntersection(normPoints);
       let lines: Array<Array<number>> = self.drawLines(normPoints, initialLines);
       let triangles: Array<Array<number>> = self.listUpTriangles(normPoints, initialLines, lines);
@@ -23,53 +29,65 @@ export default class Polygonizer {
       let gravities: Array<point.Point> = self.calculateGravities(normPoints, triangleGroups);
       let windingNumbers: Array<number> = self.countWindingNumbers(normPoints, initialLines, gravities);
       self.draw(normPoints, triangles, triangleGroups, windingNumbers);
-    });
+  }
+  */
+
+  triangulate(pointList: Array<point.Point>) {
+    this.pointList = pointList.map((p: point.Point) => p.clone());
+    this.checkLineIntersection();
+    this.drawLines();
+    this.listUpTriangles();
+    this.gatherTriangles();
+    this.calculateGravities();
+    this.countWindingNumbers();
+    this.draw();
+    console.log('point list');
+    console.log(this.pointList);
+    console.log('line list');
+    console.log(this.lineList);
+    console.log('is polygon list');
+    console.log(this.isPolygonLines);
+    console.log('line hash');
+    console.log(this.lineHash.hash);
+    console.log('triangle list');
+    console.log(this.triangleList);
+    console.log('triangle hash');
+    console.log(this.triangleHash);
+    console.log('triangle group');
+    console.log(this.triangleGroup);
+    console.log('gravities');
+    console.log(this.gravities);
+    console.log('winding numbers');
+    console.log(this.windingNumbers);
   }
 
-  normalizePointList(points: Array<point.Point>): Array<point.Point> {
-    if (points.length === 0) {
-      return [];
-    }
-
-    let xmin: number = points[0].x;
-    let xmax: number = points[0].x;
-    let ymin: number = points[0].y;
-    let ymax: number = points[0].y;
-    points.forEach((point: point.Point) => {
-      xmin = point.x < xmin ? point.x : xmin;
-      xmax = point.x > xmax ? point.x : xmax;
-      ymin = point.y < ymin ? point.y : ymin;
-      ymax = point.y > ymax ? point.y : ymax;
-    });
-    return points.map((p: point.Point) => {
-      let x: number = (p.x - xmin) / (xmax - xmin);
-      let y: number = (p.y - ymin) / (ymax - ymin);
-      return new point.Point(x, y);
-    });
-  }
-
-  checkLineIntersection(ps: Array<point.Point>): Array<Array<number>> {
-    let lines: Array<Array<number>> = [];
-    ps.forEach((p: point.Point, i: number) => {
-      if (i === ps.length - 1) {
-        lines.push([i, 0]);
+  checkLineIntersection() {
+    this.lineList = [];
+    this.isPolygonLines = [];
+    let self: Polygonizer = this;
+    this.pointList.forEach((p: point.Point, i: number) => {
+      if (i === self.pointList.length - 1) {
+        self.lineList.push([i, 0]);
+        self.isPolygonLines.push(true);
         return;
       }
-      lines.push([i, i + 1]);
+      self.lineList.push([i, i + 1]);
+      self.isPolygonLines.push(true);
     });
 
     let intersectionFound: boolean = true;
     while (intersectionFound) {
       intersectionFound = false;
-      lines.forEach((l: Array<number>, lIndex: number) => {
-        ps.forEach((p: point.Point, pIndex: number) => {
+      this.lineList.forEach((l: Array<number>, lIndex: number) => {
+        self.pointList.forEach((p: point.Point, pIndex: number) => {
           if (l.includes(pIndex) || intersectionFound) return;
-          let p1: point.Point = ps[l[0]];
-          let p2: point.Point = ps[l[1]];
+          let p1: point.Point = self.pointList[l[0]];
+          let p2: point.Point = self.pointList[l[1]];
           let ll: line.Line = new line.Line(p1, p2);
           if (ll.overlaps(new line.Line(p, p1)) && ll.overlaps(new line.Line(p, p2))) {
             intersectionFound = true;
-            lines.splice(lIndex, 1, [l[0], pIndex], [pIndex, l[1]]);
+            self.lineList.splice(lIndex, 1, [l[0], pIndex], [pIndex, l[1]]);
+            self.isPolygonLines.splice(lIndex, 1, true, true);
           }
         });
       });
@@ -77,117 +95,101 @@ export default class Polygonizer {
     intersectionFound = true;
     while (intersectionFound) {
       intersectionFound = false;
-      lines.forEach((l1: Array<number>, i1: number) => {
-        lines.forEach((l2: Array<number>, i2: number) => {
+      this.lineList.forEach((l1: Array<number>, i1: number) => {
+        self.lineList.forEach((l2: Array<number>, i2: number) => {
           if (i1 <= i2 || intersectionFound) {
             return;
           }
-          let line1: line.Line = new line.Line(ps[l1[0]], ps[l1[1]]);
-          let line2: line.Line = new line.Line(ps[l2[0]], ps[l2[1]]);
+          let line1: line.Line = new line.Line(self.pointList[l1[0]], self.pointList[l1[1]]);
+          let line2: line.Line = new line.Line(self.pointList[l2[0]], self.pointList[l2[1]]);
           if (line1.intersects(line2)) {
             let intersection: point.Point = line1.intersection(line2);
-            ps.push(intersection);
-            lines.splice(i1, 1, [l1[0], ps.length - 1], [ps.length - 1, l1[1]]);
-            lines.splice(i2, 1, [l2[0], ps.length - 1], [ps.length - 1, l2[1]]);
+            self.pointList.push(intersection);
+            self.lineList.splice(i1, 1, [l1[0], self.pointList.length - 1], [self.pointList.length - 1, l1[1]]);
+            self.isPolygonLines.splice(i1, 1, true, true);
+            self.lineList.splice(i2, 1, [l2[0], self.pointList.length - 1], [self.pointList.length - 1, l2[1]]);
+            self.isPolygonLines.splice(i2, 1, true, true);
             intersectionFound = true;
           }
         });
       });
     }
-    return lines;
   }
 
-  drawLines(ps: Array<point.Point>, initialLines: Array<Array<number>>): Array<Array<number>> {
-    let lines: Array<Array<number>> = [];
-    ps.forEach((p1: point.Point, i1: number) => {
-      ps.forEach((p2: point.Point, i2: number) => {
+  drawLines() {
+    let self: Polygonizer = this;
+    this.pointList.forEach((p1: point.Point, i1: number) => {
+      self.pointList.forEach((p2: point.Point, i2: number) => {
         if (i1 <= i2) {
           return;
         }
         let ll: line.Line = new line.Line(p1, p2);
-        for (let pIndex: number = 0; pIndex < ps.length; pIndex++) {
-          let p: point.Point = ps[pIndex];
+        for (let pIndex: number = 0; pIndex < self.pointList.length; pIndex++) {
+          let p: point.Point = self.pointList[pIndex];
           if (ll.overlaps(new line.Line(p, p1)) && ll.overlaps(new line.Line(p, p2))) {
             return;
           }
         }
-        for (let i = 0; i < lines.length; i++) {
-          let l: line.Line = new line.Line(ps[lines[i][0]], ps[lines[i][1]]);
+        for (let i = 0; i < self.lineList.length; i++) {
+          let l: line.Line = new line.Line(self.pointList[self.lineList[i][0]], self.pointList[self.lineList[i][1]]);
           if (ll.intersects(l, true)) {
             return;
           }
         }
-        for (let i = 0; i < initialLines.length; i++) {
-          let l: line.Line = new line.Line(ps[initialLines[i][0]], ps[initialLines[i][1]]);
-          if (ll.intersects(l, true)) {
-            return;
-          }
-        }
-        lines.push([i1, i2]);
+        self.lineList.push([i1, i2]);
+        self.isPolygonLines.push(false);
       });
     });
-    return lines;
+    this.lineHash = new PointIndexHash(this.lineList);
   }
 
-  listUpTriangles(normPoints: Array<point.Point>, initialLines: Array<Array<number>>, lines: Array<Array<number>>): Array<Array<number>> {
-    let triangles: Array<Array<number>> = [];
-    let ls: Array<Array<number>> = initialLines.concat(lines);
+  listUpTriangles() {
+    this.triangleList = [];
     let self: Polygonizer = this;
-    ls.forEach((l1: Array<number>, i1: number) => {
-      ls.forEach((l2: Array<number>, i2: number) => {
-        ls.forEach((l3: Array<number>, i3: number) => {
-          if (i1 <= i2 || i2 <= i3) {
-            return;
-          }
-          if (l1.includes(l2[0])) {
-            let edge: number = (l1.indexOf(l2[0]) === 0) ? 1 : 0;
-            let share: number = (edge === 0) ? 1 : 0;
-            if (l3.includes(l1[edge]) && l3.includes(l2[1])) {
-              if (self.containsNoPoints(normPoints, l1[edge], l1[share], l2[1])) {
-                triangles.push(l1.concat(l2[1]));
-              }
-            }
-          }
-          else if (l1.includes(l2[1])) {
-            let edge: number = (l1.indexOf(l2[1]) === 0) ? 1 : 0;
-            let share: number = (edge === 0) ? 1 : 0;
-            if (l3.includes(l1[edge]) && l3.includes(l2[0])) {
-              if (self.containsNoPoints(normPoints, l1[edge], l1[share], l2[0])) {
-                triangles.push(l1.concat(l2[0]));
-              }
-            }
+    this.lineList.forEach((l1: Array<number>, i1: number) => {
+      self.lineHash.hash[l1[0]].forEach((i2: number) => {
+        if (i1 === i2) return;
+        let l2: Array<number> = self.lineList[i2];
+        let l1Edge: number = l1[1];
+        let l2Edge: number = l2[(l2[0] === l1[0]) ? 1 : 0];
+        self.lineHash.hash[l1Edge].forEach((i3: number) => {
+          if (i1 === i3 || i2 === i3) return;
+          let l3: Array<number> = self.lineList[i3];
+          let t: Array<number> = [i1, i2, i3];
+          if (l3.includes(l2Edge) && self.containsNoPoints(l1[0], l1Edge, l2Edge) && !self.includesTriangle(t)) {
+            self.triangleList.push(t);
           }
         });
       });
     });
-    return triangles;
+    this.triangleHash = new PointIndexHash(this.triangleList);
   }
 
-  containsNoPoints(ps: Array<point.Point>, i1: number, i2: number, i3: number): boolean {
-    for (let pIndex: number = 0; pIndex < ps.length; pIndex++) {
-      if (this.containsPoint(ps[pIndex], ps, i1, i2, i3)) {
+  containsNoPoints(i1: number, i2: number, i3: number): boolean {
+    for (let pIndex: number = 0; pIndex < this.pointList.length; pIndex++) {
+      if (this.containsPoint(this.pointList[pIndex], i1, i2, i3)) {
         return false;
       }
     }
     return true;
   }
 
-  containsPoint(p: point.Point, ps: Array<point.Point>, i1: number, i2: number, i3: number): boolean {
-    if (!this.inAngle(p, ps, i1, i2, i3)) {
+  containsPoint(p: point.Point, i1: number, i2: number, i3: number): boolean {
+    if (!this.inAngle(p, i1, i2, i3)) {
       return false;
     }
-    if (!this.inAngle(p, ps, i2, i3, i1)) {
+    if (!this.inAngle(p, i2, i3, i1)) {
       return false;
     }
-    if (!this.inAngle(p, ps, i3, i1, i2)) {
+    if (!this.inAngle(p, i3, i1, i2)) {
       return false;
     }
     return true;
   }
 
-  inAngle(p: point.Point, ps: Array<point.Point>, i1: number, i2: number, i3: number): boolean {
-    let lineAngle: number = this.calcAngle(ps[i1], ps[i2], ps[i3]);
-    let pointAngle: number = this.calcAngle(ps[i1], ps[i2], p);
+  inAngle(p: point.Point, i1: number, i2: number, i3: number): boolean {
+    let lineAngle: number = this.calcAngle(this.pointList[i1], this.pointList[i2], this.pointList[i3]);
+    let pointAngle: number = this.calcAngle(this.pointList[i1], this.pointList[i2], p);
     return Math.abs(pointAngle) > Math.abs(lineAngle);
   }
 
@@ -209,67 +211,68 @@ export default class Polygonizer {
     return - coef * angle;
   }
 
-  calculateGravities(normPoints: Array<point.Point>, triangleGroups: Array<Array<Array<number>>>): Array<point.Point> {
-    let gravities: Array<point.Point> = [];
-    triangleGroups.forEach((ts: Array<Array<number>>) => {
-      let p1: point.Point = normPoints[ts[0][0]];
-      let p2: point.Point = normPoints[ts[0][1]];
-      let p3: point.Point = normPoints[ts[0][2]];
-      let gravity: point.Point = p1.add(p2).add(p3).scalar(1 / 3);
-      gravities.push(gravity);
-    });
-    return gravities;
+  calculateGravities() {
+    this.gravities = [];
+    let groupID: number = 0;
+    while (this.triangleGroup.indexOf(groupID) !== -1) {
+      let t: Array<number> = this.triangleList[this.triangleGroup.indexOf(groupID)];
+      let l1: Array<number> = this.lineList[t[0]];
+      let l2: Array<number> = this.lineList[t[1]];
+      let l3: Array<number> = this.lineList[t[2]];
+      let pIndices: Array<number> = l1.concat(l2).concat(l3).sort((a, b) => b - a);
+      let p1: point.Point = this.pointList[pIndices[0]];
+      let p2: point.Point = this.pointList[pIndices[2]];
+      let p3: point.Point = this.pointList[pIndices[4]];
+      this.gravities.push(p1.add(p2).add(p3).scalar(1 / 3));
+      groupID++;
+    }
   }
 
-  gatherTriangles(normPoints: Array<point.Point>, initialLines: Array<Array<number>>, lines: Array<Array<number>>, triangles: Array<Array<number>>) {
-    let tris: Array<Array<number>> = JSON.parse(JSON.stringify(triangles));
-    let triangleGroups: Array<Array<Array<number>>> = [];
+  gatherTriangles() {
+    this.triangleGroup = Array(this.triangleList.length).fill(-1);
+    let groupID: number = 0;
     let self: Polygonizer = this;
-    while (tris.length > 0) {
-      let triangleGroup: Array<Array<number>> = [];
-      triangleGroup.push(tris.splice(0, 1)[0]);
+    while (!this.triangleGroup.every((group: number) => group !== -1)) {
+      this.triangleGroup[this.triangleGroup.indexOf(-1)] = groupID;
       let loopFlag: boolean = true;
       while (loopFlag) {
         loopFlag = false;
-        tris.forEach((t1: Array<number>, i1: number) => {
-          if (loopFlag) return;
-          triangleGroup.forEach((t2: Array<number>) => {
-            if (loopFlag) return;
-            if (JSON.stringify(t1) === JSON.stringify(t2)) return;
-            if (self.shareLine(t1, t2)) {
-              let shared: Array<number> = self.sharedLine(t1, t2);
-              if (self.includesLine(shared, lines)) {
+        this.triangleList.forEach((t1: Array<number>, i1: number) => {
+          if (loopFlag || self.triangleGroup[i1] === groupID) return;
+          self.triangleGroup
+            .filter((gid: number) => gid === groupID)
+            .forEach((i2: number) => {
+              if (loopFlag) return;
+              let t2: Array<number> = self.triangleList[i2];
+              if (self.shareLine(t1, t2) && !self.isPolygonLines[self.sharedLine(t1, t2)]) {
                 loopFlag = true;
-                triangleGroup.push(tris.splice(i1, 1)[0]);
+                self.triangleGroup[i1] = groupID;
               }
-            }
-          });
+            });
         });
       }
-      triangleGroups.push(triangleGroup);
+      groupID++;
     }
-    return triangleGroups;
   }
 
   shareLine(t1: Array<number>, t2: Array<number>): boolean {
-    let score: number = 0;
-    if (t1.includes(t2[0])) score++;
-    if (t1.includes(t2[1])) score++;
-    if (t1.includes(t2[2])) score++;
-    return score === 2;
+    if (t1.includes(t2[0])) return true;
+    if (t1.includes(t2[1])) return true;
+    if (t1.includes(t2[2])) return true;
+    return false;
   }
 
-  sharedLine(t1: Array<number>, t2: Array<number>): Array<number> {
-    if (t1.includes(t2[0]) && t1.includes(t2[1])) {
-      return [t2[0], t2[1]];
+  sharedLine(t1: Array<number>, t2: Array<number>): number {
+    if (t1.includes(t2[0])) {
+      return t2[0];
     }
-    if (t1.includes(t2[1]) && t1.includes(t2[2])) {
-      return [t2[1], t2[2]];
+    if (t1.includes(t2[1])) {
+      return t2[1];
     }
-    if (t1.includes(t2[2]) && t1.includes(t2[0])) {
-      return [t2[2], t2[0]];
+    if (t1.includes(t2[2])) {
+      return t2[2];
     }
-    return [];
+    return -1;
   }
 
   includesLine(l: Array<number>, ls: Array<Array<number>>): boolean {
@@ -282,30 +285,42 @@ export default class Polygonizer {
     return false;
   }
 
-  countWindingNumbers(normPoints: Array<point.Point>, initialLines: Array<Array<number>>, gravities: Array<point.Point>): Array<number> {
-    let windingNumbers: Array<number> = Array(gravities.length).fill(0);
-    initialLines.forEach((l: Array<number>) => {
-      let p1: point.Point = normPoints[l[0]];
-      let p2: point.Point = normPoints[l[1]];
-      gravities.forEach((g: point.Point, gIndex: number) => {
-        if (p1.y <= g.y && p2.y > g.y) {
-          let yy: number = (g.y - p1.y) / (p2.y - p1.y);
-          if (g.x < (p1.x + (yy * (p2.x - p1.x)))) {
-            windingNumbers[gIndex]++;
-          }
-        }
-        else if (p1.y > g.y && p2.y <= g.y) {
-          let yy: number = (g.y - p1.y) / (p2.y - p1.y);
-          if (g.x < (p1.x + (yy * (p2.x - p1.x)))) {
-            windingNumbers[gIndex]--;
-          }
-        }
-      });
-    });
-    return windingNumbers;
+  includesTriangle(t: Array<number>): boolean {
+    for (let tIndex: number = 0; tIndex < this.triangleList.length; tIndex++) {
+      let tt: Array<number> = this.triangleList[tIndex];
+      if (tt.includes(t[0]) && tt.includes(t[1]) && tt.includes(t[2])) {
+        return true;
+      }
+    }
+    return false;
   }
 
-  draw(normPoints: Array<point.Point>, triangles: Array<Array<number>>, triangleGroups: Array<Array<Array<number>>>, windingNumbers: Array<number>) {
+  countWindingNumbers() {
+    this.windingNumbers = Array(this.gravities.length).fill(0);
+    let self: Polygonizer = this;
+    this.lineList
+      .filter((l: Array<number>, lIndex: number) => self.isPolygonLines[lIndex])
+      .forEach((l: Array<number>) => {
+        let p1: point.Point = self.pointList[l[0]];
+        let p2: point.Point = self.pointList[l[1]];
+        self.gravities.forEach((g: point.Point, gIndex: number) => {
+          if (p1.y <= g.y && p2.y > g.y) {
+            let yy: number = (g.y - p1.y) / (p2.y - p1.y);
+            if (g.x < (p1.x + (yy * (p2.x - p1.x)))) {
+              self.windingNumbers[gIndex]++;
+            }
+          }
+          else if (p1.y > g.y && p2.y <= g.y) {
+            let yy: number = (g.y - p1.y) / (p2.y - p1.y);
+            if (g.x < (p1.x + (yy * (p2.x - p1.x)))) {
+              self.windingNumbers[gIndex]--;
+            }
+          }
+        });
+      });
+  }
+
+  draw() {
     let self: Polygonizer = this;
     let mayBeCanvas: ?HTMLCanvasElement = document.createElement('canvas');
     if (mayBeCanvas == null) {
@@ -320,21 +335,66 @@ export default class Polygonizer {
       return;
     }
     let context: CanvasRenderingContext2D = mayBeContext;
-    triangleGroups.forEach((ts: Array<Array<number>>, index: number) => {
-      if (windingNumbers[index] === 0) {
+
+    this.normalizePointList();
+    this.triangleGroup.forEach((groupID: number, tIndex: number) => {
+      if (self.windingNumbers[groupID] === 0) {
         return;
       }
       context.fillStyle = "#00FF00";
-      ts.forEach((t: Array<number>) => {
-        context.beginPath();
-        context.moveTo(normPoints[t[0]].x * side, normPoints[t[0]].y * side);
-        context.lineTo(normPoints[t[1]].x * side, normPoints[t[1]].y * side);
-        context.lineTo(normPoints[t[2]].x * side, normPoints[t[2]].y * side);
-        context.fill();
-      });
+      context.fillStyle = self.numberToColor(groupID);
+      let t: Array<number> = self.triangleList[tIndex];
+      let l1: Array<number> = self.lineList[t[0]];
+      let l2: Array<number> = self.lineList[t[1]];
+      let l3: Array<number> = self.lineList[t[2]];
+      let pIndices: Array<number> = l1.concat(l2).concat(l3).sort((a, b) => b - a);
+      let p1: point.Point = self.pointList[pIndices[0]];
+      let p2: point.Point = self.pointList[pIndices[2]];
+      let p3: point.Point = self.pointList[pIndices[4]];
+      context.beginPath();
+      context.moveTo(p1.x * side, p1.y * side);
+      context.lineTo(p2.x * side, p2.y * side);
+      context.lineTo(p3.x * side, p3.y * side);
+      context.fill();
     });
     if (document.body != null) {
       document.body.appendChild(canvas);
+    }
+  }
+
+  normalizePointList() {
+    let xmin: number = this.pointList[0].x;
+    let xmax: number = this.pointList[0].x;
+    let ymin: number = this.pointList[0].y;
+    let ymax: number = this.pointList[0].y;
+    this.pointList.forEach((p: point.Point) => {
+      xmin = (p.x < xmin) ? p.x : xmin;
+      xmax = (p.x > xmax) ? p.x : xmax;
+      ymin = (p.y < ymin) ? p.y : ymin;
+      ymax = (p.y > ymax) ? p.y : ymax;
+    });
+    this.pointList.forEach((p: point.Point) => {
+      p.x = (p.x - xmin) / (xmax - xmin);
+      p.y = (p.y - ymin) / (ymax - ymin);
+    });
+  }
+
+  numberToColor(num: number): string {
+    switch (num % 6) {
+      case 0:
+        return "#FF0000";
+      case 1:
+        return "#FFFF00";
+      case 2:
+        return "#00FF00";
+      case 3:
+        return "#00FFFF";
+      case 4:
+        return "#0000FF";
+      case 5:
+        return "#FF00FF";
+      default:
+        return "#000000";
     }
   }
 }

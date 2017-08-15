@@ -10,6 +10,10 @@ export default class Point {
     this.y = y;
   }
 
+  clone(): Point {
+    return new Point(this.x, this.y);
+  }
+
   equals(another: Point): boolean {
     return this.x === another.x && this.y === another.y;
   }
