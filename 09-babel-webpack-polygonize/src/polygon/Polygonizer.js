@@ -34,31 +34,27 @@ export default class Polygonizer {
 
   triangulate(pointList: Array<point.Point>) {
     this.pointList = pointList.map((p: point.Point) => p.clone());
+    console.time('checkLineIntersection');
     this.checkLineIntersection();
+    console.timeEnd('checkLineIntersection');
+    console.time('drawLines');
     this.drawLines();
+    console.timeEnd('drawLines');
+    console.time('listUpTriangles');
     this.listUpTriangles();
+    console.timeEnd('listUpTriangles');
+    console.time('gatherTriangles');
     this.gatherTriangles();
+    console.timeEnd('gatherTriangles');
+    console.time('calculateGravities');
     this.calculateGravities();
+    console.timeEnd('calculateGravities');
+    console.time('countWindingNumbers');
     this.countWindingNumbers();
+    console.timeEnd('countWindingNumbers');
+    console.time('draw');
     this.draw();
-    console.log('point list');
-    console.log(this.pointList);
-    console.log('line list');
-    console.log(this.lineList);
-    console.log('is polygon list');
-    console.log(this.isPolygonLines);
-    console.log('line hash');
-    console.log(this.lineHash.hash);
-    console.log('triangle list');
-    console.log(this.triangleList);
-    console.log('triangle hash');
-    console.log(this.triangleHash);
-    console.log('triangle group');
-    console.log(this.triangleGroup);
-    console.log('gravities');
-    console.log(this.gravities);
-    console.log('winding numbers');
-    console.log(this.windingNumbers);
+    console.timeEnd('draw');
   }
 
   checkLineIntersection() {
@@ -240,9 +236,8 @@ export default class Polygonizer {
         this.triangleList.forEach((t1: Array<number>, i1: number) => {
           if (loopFlag || self.triangleGroup[i1] === groupID) return;
           self.triangleGroup
-            .filter((gid: number) => gid === groupID)
-            .forEach((i2: number) => {
-              if (loopFlag) return;
+            .forEach((gid: number, i2: number) => {
+              if (loopFlag || gid !== groupID) return;
               let t2: Array<number> = self.triangleList[i2];
               if (self.shareLine(t1, t2) && !self.isPolygonLines[self.sharedLine(t1, t2)]) {
                 loopFlag = true;
@@ -342,7 +337,6 @@ export default class Polygonizer {
         return;
       }
       context.fillStyle = "#00FF00";
-      context.fillStyle = self.numberToColor(groupID);
       let t: Array<number> = self.triangleList[tIndex];
       let l1: Array<number> = self.lineList[t[0]];
       let l2: Array<number> = self.lineList[t[1]];
@@ -377,24 +371,5 @@ export default class Polygonizer {
       p.x = (p.x - xmin) / (xmax - xmin);
       p.y = (p.y - ymin) / (ymax - ymin);
     });
-  }
-
-  numberToColor(num: number): string {
-    switch (num % 6) {
-      case 0:
-        return "#FF0000";
-      case 1:
-        return "#FFFF00";
-      case 2:
-        return "#00FF00";
-      case 3:
-        return "#00FFFF";
-      case 4:
-        return "#0000FF";
-      case 5:
-        return "#FF00FF";
-      default:
-        return "#000000";
-    }
   }
 }
