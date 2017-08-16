@@ -4,10 +4,11 @@ import * as point from '../point';
 import * as line from '../line';
 import PointIndexHash from './PointIndexHash';
 
-export const SIDE: number = 256;
+export const SIDE: number = 512;
 
 export default class Polygonizer {
 
+  numInitialPoints: number;
   pointList: Array<point.Point>;
 
   lineList: Array<Array<number>>;
@@ -34,6 +35,8 @@ export default class Polygonizer {
 
   triangulate(pointList: Array<point.Point>) {
     this.pointList = pointList.map((p: point.Point) => p.clone());
+    this.numInitialPoints = pointList.length;
+    console.log(this.numInitialPoints);
     console.time('checkLineIntersection');
     this.checkLineIntersection();
     console.timeEnd('checkLineIntersection');
@@ -234,7 +237,7 @@ export default class Polygonizer {
       while (loopFlag) {
         loopFlag = false;
         this.triangleList.forEach((t1: Array<number>, i1: number) => {
-          if (loopFlag || self.triangleGroup[i1] === groupID) return;
+          if (loopFlag || self.triangleGroup[i1] !== -1) return;
           self.triangleGroup
             .forEach((gid: number, i2: number) => {
               if (loopFlag || gid !== groupID) return;
@@ -349,7 +352,23 @@ export default class Polygonizer {
       context.moveTo(p1.x * side, p1.y * side);
       context.lineTo(p2.x * side, p2.y * side);
       context.lineTo(p3.x * side, p3.y * side);
+      context.lineTo(p1.x * side, p1.y * side);
       context.fill();
+      context.strokeStyle = "#0000FF";
+      context.stroke();
+    });
+    this.pointList.forEach((p: point.Point, pIndex: number) => {
+      if (pIndex === 0) return;
+      context.beginPath();
+      let previous: point.Point = self.pointList[pIndex - 1];
+      context.moveTo(previous.x * side, previous.y * side);
+      context.lineTo(p.x * side, p.y * side);
+      context.strokeStyle = "#000000";
+      context.stroke();
+    });
+    this.gravities.forEach((g: point.Point) => {
+      context.fillStyle = "#000000";
+      context.fillRect(g.x * side - 4, g.y * side - 4, 8, 8);
     });
     if (document.body != null) {
       document.body.appendChild(canvas);
@@ -371,5 +390,28 @@ export default class Polygonizer {
       p.x = (p.x - xmin) / (xmax - xmin);
       p.y = (p.y - ymin) / (ymax - ymin);
     });
+    this.gravities.forEach((g: point.Point) => {
+      g.x = (g.x - xmin) / (xmax - xmin);
+      g.y = (g.y - ymin) / (ymax - ymin);
+    });
+  }
+
+  numberToColor(num: number): string {
+    switch (num % 6) {
+      case 0:
+        return "#FF0000";
+      case 1:
+        return "#FFFF00";
+      case 2:
+        return "#00FF00";
+      case 3:
+        return "#00FFFF";
+      case 4:
+        return "#0000FF";
+      case 5:
+        return "#FF00FF";
+      default:
+        return "#000000";
+    }
   }
 }

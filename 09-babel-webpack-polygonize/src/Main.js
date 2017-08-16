@@ -11,9 +11,11 @@ export default class Main {
     let polygonizer: polygon.Polygonizer = new polygon.Polygonizer();
     console.time('total');
     pointsJson.points.forEach((points: Array<Array<number>>, index: number) => {
+      ///*
       if (index === 11) {
         return;
       }
+      //*/
       console.log(index);
       let pointList: Array<point.Point> = point.PointUtils.fromNumberArrayPoints(points);
       polygonizer.triangulate(pointList);
