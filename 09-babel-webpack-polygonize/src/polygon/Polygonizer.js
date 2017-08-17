@@ -46,9 +46,6 @@ export default class Polygonizer {
     console.time('listUpTriangles');
     this.listUpTriangles();
     console.timeEnd('listUpTriangles');
-    console.time('gatherTriangles');
-    this.gatherTriangles();
-    console.timeEnd('gatherTriangles');
     console.time('calculateGravities');
     this.calculateGravities();
     console.timeEnd('calculateGravities');
@@ -213,8 +210,7 @@ export default class Polygonizer {
   calculateGravities() {
     this.gravities = [];
     let groupID: number = 0;
-    while (this.triangleGroup.indexOf(groupID) !== -1) {
-      let t: Array<number> = this.triangleList[this.triangleGroup.indexOf(groupID)];
+    this.triangleList.forEach((t: Array<number>) => {
       let l1: Array<number> = this.lineList[t[0]];
       let l2: Array<number> = this.lineList[t[1]];
       let l3: Array<number> = this.lineList[t[2]];
@@ -224,33 +220,7 @@ export default class Polygonizer {
       let p3: point.Point = this.pointList[pIndices[4]];
       this.gravities.push(p1.add(p2).add(p3).scalar(1 / 3));
       groupID++;
-    }
-  }
-
-  gatherTriangles() {
-    this.triangleGroup = Array(this.triangleList.length).fill(-1);
-    let groupID: number = 0;
-    let self: Polygonizer = this;
-    while (!this.triangleGroup.every((group: number) => group !== -1)) {
-      this.triangleGroup[this.triangleGroup.indexOf(-1)] = groupID;
-      let loopFlag: boolean = true;
-      while (loopFlag) {
-        loopFlag = false;
-        this.triangleList.forEach((t1: Array<number>, i1: number) => {
-          if (loopFlag || self.triangleGroup[i1] !== -1) return;
-          self.triangleGroup
-            .forEach((gid: number, i2: number) => {
-              if (loopFlag || gid !== groupID) return;
-              let t2: Array<number> = self.triangleList[i2];
-              if (self.shareLine(t1, t2) && !self.isPolygonLines[self.sharedLine(t1, t2)]) {
-                loopFlag = true;
-                self.triangleGroup[i1] = groupID;
-              }
-            });
-        });
-      }
-      groupID++;
-    }
+    });
   }
 
   shareLine(t1: Array<number>, t2: Array<number>): boolean {
@@ -296,26 +266,25 @@ export default class Polygonizer {
   countWindingNumbers() {
     this.windingNumbers = Array(this.gravities.length).fill(0);
     let self: Polygonizer = this;
-    this.lineList
-      .filter((l: Array<number>, lIndex: number) => self.isPolygonLines[lIndex])
-      .forEach((l: Array<number>) => {
-        let p1: point.Point = self.pointList[l[0]];
-        let p2: point.Point = self.pointList[l[1]];
-        self.gravities.forEach((g: point.Point, gIndex: number) => {
-          if (p1.y <= g.y && p2.y > g.y) {
-            let yy: number = (g.y - p1.y) / (p2.y - p1.y);
-            if (g.x < (p1.x + (yy * (p2.x - p1.x)))) {
-              self.windingNumbers[gIndex]++;
-            }
+    this.lineList.forEach((l: Array<number>, lIndex: number) => {
+      if (!self.isPolygonLines[lIndex]) return;
+      let p1: point.Point = self.pointList[l[0]];
+      let p2: point.Point = self.pointList[l[1]];
+      self.gravities.forEach((g: point.Point, gIndex: number) => {
+        if (p1.y <= g.y && p2.y > g.y) {
+          let yy: number = (g.y - p1.y) / (p2.y - p1.y);
+          if (g.x < (p1.x + (yy * (p2.x - p1.x)))) {
+            self.windingNumbers[gIndex]++;
           }
-          else if (p1.y > g.y && p2.y <= g.y) {
-            let yy: number = (g.y - p1.y) / (p2.y - p1.y);
-            if (g.x < (p1.x + (yy * (p2.x - p1.x)))) {
-              self.windingNumbers[gIndex]--;
-            }
+        }
+        else if (p1.y > g.y && p2.y <= g.y) {
+          let yy: number = (g.y - p1.y) / (p2.y - p1.y);
+          if (g.x < (p1.x + (yy * (p2.x - p1.x)))) {
+            self.windingNumbers[gIndex]--;
           }
-        });
+        }
       });
+    });
   }
 
   draw() {
@@ -335,12 +304,11 @@ export default class Polygonizer {
     let context: CanvasRenderingContext2D = mayBeContext;
 
     this.normalizePointList();
-    this.triangleGroup.forEach((groupID: number, tIndex: number) => {
-      if (self.windingNumbers[groupID] === 0) {
+    this.triangleList.forEach((t: Array<number>, tIndex: number) => {
+      if (self.windingNumbers[tIndex] === 0) {
         return;
       }
       context.fillStyle = "#00FF00";
-      let t: Array<number> = self.triangleList[tIndex];
       let l1: Array<number> = self.lineList[t[0]];
       let l2: Array<number> = self.lineList[t[1]];
       let l3: Array<number> = self.lineList[t[2]];
@@ -356,19 +324,6 @@ export default class Polygonizer {
       context.fill();
       context.strokeStyle = "#0000FF";
       context.stroke();
-    });
-    this.pointList.forEach((p: point.Point, pIndex: number) => {
-      if (pIndex === 0) return;
-      context.beginPath();
-      let previous: point.Point = self.pointList[pIndex - 1];
-      context.moveTo(previous.x * side, previous.y * side);
-      context.lineTo(p.x * side, p.y * side);
-      context.strokeStyle = "#000000";
-      context.stroke();
-    });
-    this.gravities.forEach((g: point.Point) => {
-      context.fillStyle = "#000000";
-      context.fillRect(g.x * side - 4, g.y * side - 4, 8, 8);
     });
     if (document.body != null) {
       document.body.appendChild(canvas);
