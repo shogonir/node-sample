@@ -22,39 +22,25 @@ export default class Polygonizer {
   gravities: Array<point.Point>;
   windingNumbers: Array<number>;
 
-  /*
-      let initialLines: Array<Array<number>> = self.checkLineIntersection(normPoints);
-      let lines: Array<Array<number>> = self.drawLines(normPoints, initialLines);
-      let triangles: Array<Array<number>> = self.listUpTriangles(normPoints, initialLines, lines);
-      let triangleGroups: Array<Array<Array<number>>> = self.gatherTriangles(normPoints, initialLines, lines, triangles);
-      let gravities: Array<point.Point> = self.calculateGravities(normPoints, triangleGroups);
-      let windingNumbers: Array<number> = self.countWindingNumbers(normPoints, initialLines, gravities);
-      self.draw(normPoints, triangles, triangleGroups, windingNumbers);
-  }
-  */
-
   triangulate(pointList: Array<point.Point>) {
-    this.pointList = pointList.map((p: point.Point) => p.clone());
+    this.pointList = pointList.map((p: point.Point) => {
+      return new point.Point(Math.floor(p.x * 3600 * 1000), Math.floor(p.y * 3600 * 1000));
+    });
     this.numInitialPoints = pointList.length;
     console.log(this.numInitialPoints);
     console.time('checkLineIntersection');
     this.checkLineIntersection();
     console.timeEnd('checkLineIntersection');
-    console.time('drawLines');
-    this.drawLines();
-    console.timeEnd('drawLines');
-    console.time('listUpTriangles');
-    this.listUpTriangles();
-    console.timeEnd('listUpTriangles');
-    console.time('calculateGravities');
-    this.calculateGravities();
-    console.timeEnd('calculateGravities');
-    console.time('countWindingNumbers');
-    this.countWindingNumbers();
-    console.timeEnd('countWindingNumbers');
-    console.time('draw');
-    this.draw();
-    console.timeEnd('draw');
+
+    console.time('drawCanvas');
+    this.drawCanvas();
+    console.timeEnd('drawCanvas');
+
+    console.time('clipEars');
+    this.clipEars();
+    console.timeEnd('clipEars');
+
+    this.drawTriangles();
   }
 
   checkLineIntersection() {
@@ -109,6 +95,184 @@ export default class Polygonizer {
           }
         });
       });
+    }
+  }
+
+  drawCanvas(lineList: Array<Array<number>>) {
+    let self: Polygonizer = this;
+    let headPoint: point.Point = this.pointList[0];
+    let xmin: number = headPoint.x;
+    let xmax: number = headPoint.x;
+    let ymin: number = headPoint.y;
+    let ymax: number = headPoint.y;
+    this.pointList.forEach((p: point.Point) => {
+      xmin = (p.x < xmin) ? p.x : xmin;
+      xmax = (p.x > xmax) ? p.x : xmax;
+      ymin = (p.y < ymin) ? p.y : ymin;
+      ymax = (p.y > ymax) ? p.y : ymax;
+    });
+    let normalizedPoints: Array<point.Point> = this.pointList.map((p: point.Point) => {
+      let x: number = (p.x - xmin) / (xmax - xmin);
+      let y: number = (p.y - ymin) / (ymax - ymin);
+      return new point.Point(x, y);
+    });
+    let mayBeCanvas: ?HTMLCanvasElement = document.createElement('canvas');
+    let canvas: HTMLCanvasElement;
+    if (mayBeCanvas != null) {
+      canvas = mayBeCanvas;
+    }
+    canvas.width = SIDE;
+    canvas.height = SIDE;
+    let meyBeContext: ?CanvasRenderingContext2D = canvas.getContext('2d');
+    let context: CanvasRenderingContext2D;
+    if (meyBeContext != null) {
+      context = meyBeContext;
+    }
+    context.beginPath();
+    normalizedPoints.forEach((p: point.Point, pIndex: number) => {
+      if (pIndex >= self.numInitialPoints) return;
+      if (pIndex === 0) {
+        context.moveTo(p.x * SIDE, p.y * SIDE);
+        return;
+      }
+      context.lineTo(p.x * SIDE, p.y * SIDE);
+    });
+    context.fillStyle = "#DDDDDD";
+    context.fill();
+    let ls: Array<Array<number>> = (lineList == null) ? this.lineList : lineList;
+    ls.forEach((l: Array<number>, lIndex: number) => {
+      let pFrom: point.Point = normalizedPoints[l[0]];
+      let pTo: point.Point = normalizedPoints[l[1]];
+      context.beginPath();
+      context.moveTo(pFrom.x * SIDE, pFrom.y * SIDE);
+      context.lineTo(pTo.x * SIDE, pTo.y * SIDE);
+      context.strokeStyle = self.numberToColor(lIndex);
+      context.stroke();
+    });
+    if (document.body != null) {
+      document.body.appendChild(canvas);
+    }
+  }
+
+  clipEars() {
+    let self: Polygonizer = this;
+    this.triangleList = [];
+    this.isRemoved = Array(this.pointList.length).fill(false);
+    let lineList: Array<Array<number>> = JSON.parse(JSON.stringify(this.lineList));
+    while (lineList.length >= 3) {
+      let triangleFound: boolean = false;
+      for (let lIndex: number = 0; lIndex < lineList.length; lIndex++) {
+        let l: Array<number> = lineList[lIndex];
+        if (lIndex === 0 && lIndex === lineList.length - 1) continue;
+        let next: Array<number> = (lIndex === lineList.length - 1) ? lineList[0] : lineList[lIndex + 1];
+        if (l[0] === l[1] || l[0] === next[1] || l[1] === next[1]) continue;
+        let p1: point.Point = self.pointList[l[0]];
+        let p2: point.Point = self.pointList[l[1]];
+        let p3: point.Point = self.pointList[next[1]];
+        let l1: line.Line = new line.Line(p1, p2);
+        let l2: line.Line = new line.Line(p2, p3);
+        let l3: line.Line = new line.Line(p1, p3);
+        if (l1.overlaps(l2) || l2.overlaps(l3) || l3.overlaps(l1)) continue;
+        let breakFlag: boolean = false;
+        for (let lIndex2: number = 0; lIndex2 < lineList.length; lIndex2++) {
+          let ll: Array<number> = lineList[lIndex2];
+          if ((ll[0] === l[0] && ll[1] === next[1]) || (ll[1] === l[0] && ll[0] === next[1])) continue;
+          let l4: line.Line = new line.Line(self.pointList[ll[0]], self.pointList[ll[1]]);
+          if (l3.intersects(l4, false)) {
+            breakFlag = true;
+            break;
+          }
+        }
+        if (breakFlag) continue;
+        let g: point.Point = p1.add(p2).add(p3).scalar(1 / 3);
+
+        let windingNumber: number = 0;
+        lineList.forEach((lll: Array<number>) => {
+          let p1: point.Point = self.pointList[lll[0]];
+          let p2: point.Point = self.pointList[lll[1]];
+          if (p1.y <= g.y && p2.y > g.y) {
+            let yy: number = (g.y - p1.y) / (p2.y - p1.y);
+            if (g.x < (p1.x + (yy * (p2.x - p1.x)))) {
+              windingNumber++;
+            }
+          }
+          else if (p1.y > g.y && p2.y <= g.y) {
+            let yy: number = (g.y - p1.y) / (p2.y - p1.y);
+            if (g.x < (p1.x + (yy * (p2.x - p1.x)))) {
+              windingNumber--;
+            }
+          }
+        });
+        if (windingNumber === 0) continue;
+
+        triangleFound = true;
+        self.triangleList.push([l[0], l[1], next[1]]);
+        let flag: boolean = false;
+        let num: number = -1;
+        lineList.forEach((ll: Array<number>, lnum: number) => {
+          if ((l[0] === ll[0] && next[1] === ll[1]) || (l[0] === ll[1] && next[1] === ll[0])) {
+            flag = true;
+            num = lnum;
+          }
+        });
+
+        if (flag) {
+          if (lIndex > num) {
+            lineList.splice(lIndex, 2);
+            lineList.splice(num, 1);
+          } else {
+            lineList.splice(num, 1);
+            lineList.splice(lIndex, 2);
+          }
+        } else {
+          if (lIndex === lineList.length - 1) {
+            lineList.splice(lIndex, 1, [l[0], next[1]]);
+            lineList.splice(0, 1);
+          } else {
+            lineList.splice(lIndex, 2, [l[0], next[1]]);
+          }
+        }
+
+        //this.drawCanvas(lineList);
+        break;
+      }
+      if (triangleFound === false) {
+        break;
+      }
+    }
+  }
+
+  drawTriangles() {
+    let self: Polygonizer = this;
+    let mayBeCanvas: ?HTMLCanvasElement = document.createElement('canvas');
+    let canvas: HTMLCanvasElement;
+    if (mayBeCanvas != null) {
+      canvas = mayBeCanvas;
+    }
+    canvas.width = SIDE;
+    canvas.height = SIDE;
+    let meyBeContext: ?CanvasRenderingContext2D = canvas.getContext('2d');
+    let context: CanvasRenderingContext2D;
+    if (meyBeContext != null) {
+      context = meyBeContext;
+    }
+    this.normalizePointList();
+    this.triangleList.forEach((t: Array<number>) => {
+      let p1: point.Point = self.pointList[t[0]];
+      let p2: point.Point = self.pointList[t[1]];
+      let p3: point.Point = self.pointList[t[2]];
+      context.beginPath();
+      context.moveTo(p1.x * SIDE, p1.y * SIDE);
+      context.lineTo(p2.x * SIDE, p2.y * SIDE);
+      context.lineTo(p3.x * SIDE, p3.y * SIDE);
+      context.lineTo(p1.x * SIDE, p1.y * SIDE);
+      context.fillStyle = "#DDDDDD";
+      context.fill();
+      context.strokeStyle = "#00FF00";
+      context.stroke();
+    });
+    if (document.body != null) {
+      document.body.appendChild(canvas);
     }
   }
 
@@ -345,10 +509,12 @@ export default class Polygonizer {
       p.x = (p.x - xmin) / (xmax - xmin);
       p.y = (p.y - ymin) / (ymax - ymin);
     });
+    /*
     this.gravities.forEach((g: point.Point) => {
       g.x = (g.x - xmin) / (xmax - xmin);
       g.y = (g.y - ymin) / (ymax - ymin);
     });
+    */
   }
 
   numberToColor(num: number): string {

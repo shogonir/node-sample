@@ -142,4 +142,12 @@ export default class Line {
       ((d - b) * (g - e) - (c - a) * (h - f));
     return new point.Point(x, y);
   }
+
+  distanceToPoint(p: point.Point): number {
+    var a = this.p2.x - this.p1.x;
+    var b = this.p2.y - this.p1.y;
+    var r2 = a ** 2 + b ** 2;
+    var f1 = a * (this.p1.y - p.y) - b * (this.p1.x - p.x);
+    return Math.sqrt(f1 ** 2 / r2);
+  }
 }
