@@ -20,6 +20,6 @@
     "webpack-dev-server": "^2.4.5"
   },
   "dependencies": {
-    "three": "^0.85.2"
+    "three": "^0.137.0"
   }
 }
